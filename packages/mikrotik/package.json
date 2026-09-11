@@ -1,0 +1,22 @@
+{
+  "name": "@hotzonex/mikrotik",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "MikrotikProvider interface, RouterOS API/REST implementations and mocks. No business logic, no Supabase.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./errors": "./src/errors.ts",
+    "./types": "./src/types.ts",
+    "./setup-script": "./src/setup-script.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test:live": "vitest run --config vitest.live.config.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "~6.0.3",
+    "vitest": "^5.0.0"
+  }
+}

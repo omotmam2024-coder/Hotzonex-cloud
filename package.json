@@ -1,44 +1,34 @@
 {
   "name": "hotzonex-cloud",
-  "version": "0.1.0",
   "private": true,
-  "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "next lint",
-    "db:generate": "prisma generate",
-    "db:migrate": "prisma migrate dev",
-    "db:seed": "ts-node prisma/seed.ts",
-    "test": "vitest run"
+  "description": "Hotzonex Cloud — MikroTik Hotspot Management & WiFi Platform",
+  "packageManager": "pnpm@10.34.5",
+  "engines": {
+    "node": ">=22.12"
   },
-  "dependencies": {
-    "@prisma/client": "^5.18.0",
-    "bcryptjs": "^2.4.3",
-    "clsx": "^2.1.21",
-    "date-fns": "^4.1.0",
-    "jsonwebtoken": "^9.0.2",
-    "lucide-react": "^0.453.0",
-    "next": "14.2.15",
-    "prisma": "^5.18.0",
-    "react": "18.3.1",
-    "react-dom": "18.3.1",
-    "tailwind-merge": "^2.5.2",
-    "zod": "^3.23.0"
+  "type": "module",
+  "scripts": {
+    "dev": "pnpm --parallel --filter @hotzonex/web --filter @hotzonex/connector dev",
+    "build": "pnpm -r --if-present build",
+    "lint": "eslint . --max-warnings=0",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "pnpm --filter @hotzonex/web test:e2e",
+    "test:live": "pnpm --filter @hotzonex/mikrotik test:live",
+    "db:migrate": "pnpm --filter @hotzonex/db migrate",
+    "db:seed": "pnpm --filter @hotzonex/db seed",
+    "db:types": "pnpm --filter @hotzonex/db types",
+    "db:types:offline": "pnpm --filter @hotzonex/db types:offline"
   },
   "devDependencies": {
-    "@types/bcryptjs": "^2.4.1",
-    "@types/jsonwebtoken": "^9.0.5",
-    "@types/node": "^22.10.1",
-    "@types/react": "^18.3.12",
-    "@types/react-dom": "^18.3.1",
-    "autoprefixer": "^10.4.20",
-    "eslint": "^8.57.1",
-    "eslint-config-next": "14.2.15",
-    "postcss": "^8.4.49",
-    "tailwindcss": "^3.4.16",
-    "ts-node": "^10.9.2",
-    "typescript": "^5.7.2",
-    "vitest": "^2.1.5"
+    "@eslint/js": "^10.0.0",
+    "@types/node": "^24.0.0",
+    "eslint": "^10.10.0",
+    "eslint-plugin-react-hooks": "^7.0.0",
+    "globals": "^16.0.0",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.70.0",
+    "vitest": "^5.0.0"
   }
 }

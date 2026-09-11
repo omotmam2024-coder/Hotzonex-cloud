@@ -1,10 +1,23 @@
 node_modules
-.next
+dist
+coverage
+*.tsbuildinfo
 .env
 .env.local
 .env.*.local
-dist
-coverage
-prisma/dev.db
-npm-debug.log*
+!.env.example
 .DS_Store
+npm-debug.log*
+pnpm-debug.log*
+
+# web
+apps/web/dev-dist
+apps/web/playwright-report
+apps/web/test-results
+
+# connector dev-only mock state (see apps/connector/README)
+apps/connector/.mock-state.json
+
+# supabase local
+supabase/.branches
+supabase/.temp
