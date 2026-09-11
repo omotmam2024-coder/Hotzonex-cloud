@@ -200,7 +200,9 @@ language sql immutable set search_path = '' as $$
      and coalesce(p ->> 'kid', '') ~ '^[0-9a-f]{16,64}$'
      and coalesce(p ->> 'epk', '') ~ '^[A-Za-z0-9_-]{87}$'
      and coalesce(p ->> 'iv', '') ~ '^[A-Za-z0-9_-]{16}$'
-     and coalesce(p ->> 'ct', '') ~ '^[A-Za-z0-9_-]{24,2048}$'
+     -- Postgres caps regex repetition counts at 255, so length is checked separately.
+     and coalesce(p ->> 'ct', '') ~ '^[A-Za-z0-9_-]+$'
+     and char_length(p ->> 'ct') between 24 and 2048
 $$;
 
 create function public.submit_router_credentials(p_router_id uuid, p_sealed jsonb, p_idempotency_key text)

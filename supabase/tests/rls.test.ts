@@ -191,14 +191,22 @@ describe('tenant isolation — tenant A cannot read, update, or delete tenant B 
       tx.query(`insert into public.routers (tenant_id, name) values ($1, 'sneaky')`, [tenantB]),
     );
     expect(rtr).toBe('denied');
-    const job = await attempt(user(adminA), (tx) =>
-      rpc(tx, 'enqueue_router_job', { p_router_id: routerB.id, p_type: 'router.sync', p_idempotency_key: 'cross-tenant-1' }).then((rows) => ({ rows })),
-    ).catch((e: unknown) => e);
-    expect(job).toBeInstanceOf(Error);
-    const creds = await as(db, user(adminA), (tx) =>
-      rpc(tx, 'submit_router_credentials', { p_router_id: routerB.id, p_sealed: fakeEnvelope(), p_idempotency_key: 'cross-tenant-2' }),
-    ).catch((e: unknown) => e);
-    expect(creds).toBeInstanceOf(Error);
+    await expect(
+      as(db, user(adminA), (tx) => rpc(tx, 'enqueue_router_job', { p_router_id: routerB.id, p_type: 'router.sync', p_idempotency_key: 'cross-tenant-1' })),
+    ).rejects.toThrow(/Router not found/);
+    await expect(
+      as(db, user(adminA), (tx) => rpc(tx, 'submit_router_credentials', { p_router_id: routerB.id, p_sealed: fakeEnvelope(), p_idempotency_key: 'cross-tenant-2' })),
+    ).rejects.toThrow(/Router not found/);
+  });
+
+  it('positive control: A can submit a well-formed envelope for its own router, and malformed ones are refused', async () => {
+    const [job] = await as(db, user(techA), (tx) =>
+      rpc<{ type: string; status: string }>(tx, 'submit_router_credentials', { p_router_id: routerA.id, p_sealed: fakeEnvelope(), p_idempotency_key: 'own-tenant-1' }),
+    );
+    expect(job).toMatchObject({ type: 'router.ingest_credentials', status: 'pending' });
+    await expect(
+      as(db, user(techA), (tx) => rpc(tx, 'submit_router_credentials', { p_router_id: routerA.id, p_sealed: { ...fakeEnvelope(), password: 'plain' }, p_idempotency_key: 'own-tenant-2' })),
+    ).rejects.toThrow(/malformed/);
   });
 });
 

@@ -125,7 +125,7 @@ export function isSealedEnvelope(value: unknown): value is SealedEnvelope {
     typeof e['kid'] === 'string' && /^[0-9a-f]{16,64}$/.test(e['kid']) &&
     typeof e['epk'] === 'string' && /^[A-Za-z0-9_-]{87}$/.test(e['epk']) &&
     typeof e['iv'] === 'string' && /^[A-Za-z0-9_-]{16}$/.test(e['iv']) &&
-    typeof e['ct'] === 'string' && /^[A-Za-z0-9_-]{24,2048}$/.test(e['ct'])
+    typeof e['ct'] === 'string' && /^[A-Za-z0-9_-]+$/.test(e['ct']) && e['ct'].length >= 24 && e['ct'].length <= 2048
   );
 }
 

@@ -1,0 +1,14 @@
+**/node_modules
+**/dist
+**/dev-dist
+**/.env
+**/.env.*
+!**/.env.example
+**/.mock-state.json
+.git
+apps/web
+supabase/.temp
+supabase/.branches
+**/coverage
+**/playwright-report
+**/test-results

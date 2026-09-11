@@ -1,4 +1,4 @@
-﻿/**
+/**
  * A connector wired to a real Postgres (PGlite + every migration) and the
  * mock MikroTik provider. Everything above the transport is production code.
  */
@@ -63,7 +63,9 @@ export interface World {
   close(): Promise<void>;
 }
 
-export async function createWorld(opts: { registry?: Record<string, RegisteredJob>; timeoutMs?: number } = {}): Promise<World> {
+export async function createWorld(
+  opts: { registry?: Record<string, RegisteredJob>; timeoutMs?: number; breakerCooldownMs?: number } = {},
+): Promise<World> {
   const db = await createTestDb();
   const tenantId = await createTenant(db, `t-${randomUUID().slice(0, 8)}`);
   const admin = await createUser(db, { email: `admin-${randomUUID().slice(0, 6)}@hz.test`, role: 'ADMIN', tenantId });
@@ -84,7 +86,10 @@ export async function createWorld(opts: { registry?: Record<string, RegisteredJo
     kind: 'api',
     keyring,
     timeoutMs: opts.timeoutMs ?? 200,
-    pool: { breaker: { failureThreshold: 3, baseCooldownMs: 20, maxCooldownMs: 40 }, idleTimeoutMs: 1_000 },
+    pool: {
+      breaker: { failureThreshold: 3, baseCooldownMs: opts.breakerCooldownMs ?? 20, maxCooldownMs: (opts.breakerCooldownMs ?? 20) * 2 },
+      idleTimeoutMs: 1_000,
+    },
     factory: (params: ConnectionParams) => {
       const p = new MockMikrotikProvider(params, {
         ...mockOptions,

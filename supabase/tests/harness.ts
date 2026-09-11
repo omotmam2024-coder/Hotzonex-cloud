@@ -21,7 +21,7 @@ export function migrationFiles(): string[] {
 
 export type Queryable = PGlite | Transaction;
 
-export async function createTestDb(opts: { seed?: boolean } = {}): Promise<PGlite> {
+async function migratedDb(): Promise<PGlite> {
   const db = await PGlite.create();
   await db.exec(readFileSync(join(here, 'supabase-shim.sql'), 'utf8'));
   for (const file of migrationFiles()) {
@@ -30,6 +30,21 @@ export async function createTestDb(opts: { seed?: boolean } = {}): Promise<PGlit
     } catch (error) {
       throw new Error(`migration ${file} failed: ${(error as Error).message}`, { cause: error });
     }
+  }
+  return db;
+}
+
+/** Migrations run once per test worker; each test gets an isolated clone of that database. */
+let template: Promise<PGlite> | null = null;
+
+export async function createTestDb(opts: { seed?: boolean; fresh?: boolean } = {}): Promise<PGlite> {
+  let db: PGlite;
+  if (opts.fresh) {
+    db = await migratedDb();
+  } else {
+    template ??= migratedDb();
+    // clone() is typed as the interface; at runtime it is a full PGlite instance.
+    db = (await (await template).clone()) as PGlite;
   }
   if (opts.seed) await db.exec(readFileSync(join(SUPABASE_DIR, 'seed.sql'), 'utf8'));
   return db;

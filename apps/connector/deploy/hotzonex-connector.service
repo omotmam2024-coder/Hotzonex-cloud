@@ -1,0 +1,43 @@
+# systemd unit for running the connector directly on the VPS (without Docker).
+# Install: see docs/RUNBOOK.md → "Option B: systemd".
+#   sudo cp hotzonex-connector.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now hotzonex-connector
+
+[Unit]
+Description=Hotzonex Cloud connector (MikroTik control plane)
+Documentation=https://github.com/omotmam2024-coder/Hotzonex-cloud/blob/main/docs/RUNBOOK.md
+After=network-online.target wg-quick@wg0.service
+Wants=network-online.target
+Requires=wg-quick@wg0.service
+
+[Service]
+Type=simple
+User=hotzonex
+Group=hotzonex
+WorkingDirectory=/opt/hotzonex-connector
+EnvironmentFile=/etc/hotzonex/connector.env
+ExecStart=/usr/bin/node --enable-source-maps /opt/hotzonex-connector/dist/main.js
+Restart=always
+RestartSec=5
+# Allow a clean drain of in-flight jobs on stop.
+TimeoutStopSec=40
+KillSignal=SIGTERM
+
+# Only capability needed: manage WireGuard peers on wg0.
+AmbientCapabilities=CAP_NET_ADMIN
+CapabilityBoundingSet=CAP_NET_ADMIN
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_NETLINK AF_UNIX
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

@@ -56,7 +56,12 @@ export class ConfigError extends Error {
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): ConnectorConfig {
   const result = schema.safeParse(env);
   if (!result.success) {
-    const lines = result.error.issues.map((i) => `  ${i.path.join('.') || '(env)'}: ${i.message}`);
+    const lines = result.error.issues.map((i) => {
+      const name = i.path.join('.') || '(env)';
+      const value = env[name];
+      const missing = value === undefined || value === '';
+      return `  ${name}: ${missing ? 'is required' : i.message}`;
+    });
     throw new ConfigError(`Invalid connector configuration:\n${lines.join('\n')}\nSee apps/connector/.env.example.`);
   }
   return result.data;

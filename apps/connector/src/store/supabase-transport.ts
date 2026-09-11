@@ -31,7 +31,12 @@ export class SupabaseTransport implements RpcTransport {
       throw new StoreError(`${fn}: data plane unreachable (${(error as Error).name})`, { cause: error });
     }
     if (response.error) {
-      throw new StoreError(`${fn}: ${response.error.message}${response.error.code ? ` [${response.error.code}]` : ''}`);
+      const { message, code } = response.error;
+      // supabase-js reports network failures as an error object rather than throwing.
+      if (!code && /fetch failed|network|ECONNREFUSED|ENOTFOUND|AbortError|TimeoutError|timed out/i.test(message)) {
+        throw new StoreError(`${fn}: data plane unreachable (${message})`);
+      }
+      throw new StoreError(`${fn}: ${message}${code ? ` [${code}]` : ''}`);
     }
     return response.data;
   }

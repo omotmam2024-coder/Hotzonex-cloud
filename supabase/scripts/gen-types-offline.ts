@@ -20,7 +20,7 @@ interface TypeInfo {
   nspname: string;
 }
 
-const db = await createTestDb();
+const db = await createTestDb({ fresh: true });
 
 const types = new Map<number, TypeInfo>();
 for (const t of (

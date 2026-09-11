@@ -10,7 +10,8 @@
     "build": "node build.mjs",
     "typecheck": "tsc -p tsconfig.json",
     "rekey": "tsx --env-file-if-exists=.env src/cli/rekey.ts",
-    "mock:router": "tsx src/cli/mock-router.ts"
+    "mock:router": "tsx src/cli/mock-router.ts",
+    "smoke": "tsx test/smoke/run-smoke.ts"
   },
   "dependencies": {
     "@hotzonex/mikrotik": "workspace:*",

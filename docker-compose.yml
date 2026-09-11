@@ -1,0 +1,41 @@
+# Hotzonex Cloud connector.
+#
+#   VPS (real routers):   docker compose up -d connector
+#   Local (mock routers): docker compose --profile dev up connector-mock
+#
+# The Supabase stack itself runs via the Supabase CLI (`pnpm db:migrate`), which
+# manages its own containers — see docs/RUNBOOK.md.
+
+services:
+  connector:
+    build:
+      context: .
+      dockerfile: apps/connector/Dockerfile
+    image: hotzonex-connector:latest
+    env_file: apps/connector/.env
+    # Host networking + NET_ADMIN: the connector manages peers on the host's wg0
+    # and reaches routers at their 10.77.x.y tunnel addresses.
+    network_mode: host
+    cap_add: [NET_ADMIN]
+    restart: unless-stopped
+    stop_grace_period: 40s
+    read_only: true
+    security_opt: [no-new-privileges:true]
+    logging:
+      driver: json-file
+      options: { max-size: 10m, max-file: '5' }
+
+  connector-mock:
+    profiles: [dev]
+    build:
+      context: .
+      dockerfile: apps/connector/Dockerfile
+    image: hotzonex-connector:latest
+    env_file: apps/connector/.env
+    environment:
+      MIKROTIK_PROVIDER: mock
+      # Reach the Supabase CLI stack running on the host.
+      SUPABASE_URL: http://host.docker.internal:54321
+      MOCK_STATE_FILE: /tmp/mock-state.json
+    extra_hosts: ['host.docker.internal:host-gateway']
+    ports: ['8080:8080']
