@@ -1,0 +1,31 @@
+{
+  "name": "@hotzonex/connector",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Hotzonex Cloud control plane: claims jobs from Supabase, talks to MikroTik routers over WireGuard, polls health.",
+  "scripts": {
+    "dev": "tsx watch --env-file-if-exists=.env src/main.ts",
+    "start": "node dist/main.js",
+    "build": "node build.mjs",
+    "typecheck": "tsc -p tsconfig.json",
+    "rekey": "tsx --env-file-if-exists=.env src/cli/rekey.ts",
+    "mock:router": "tsx src/cli/mock-router.ts"
+  },
+  "dependencies": {
+    "@hotzonex/mikrotik": "workspace:*",
+    "@hotzonex/shared": "workspace:*",
+    "@supabase/supabase-js": "^2.116.0",
+    "pino": "^10.3.1",
+    "zod": "^4.6.2"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "0.5.8",
+    "@hotzonex/db": "workspace:*",
+    "@types/node": "^24.0.0",
+    "esbuild": "^0.28.2",
+    "tsx": "^4.23.13",
+    "typescript": "~6.0.3",
+    "vitest": "^5.0.0"
+  }
+}
