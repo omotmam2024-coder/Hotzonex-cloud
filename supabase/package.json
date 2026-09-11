@@ -1,0 +1,31 @@
+{
+  "name": "@hotzonex/db",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Supabase migrations, RLS policies, seed data, and database tests.",
+  "exports": {
+    "./testing": "./tests/harness.ts"
+  },
+  "scripts": {
+    "migrate": "node scripts/migrate.mjs",
+    "seed": "tsx scripts/seed.ts",
+    "types": "node scripts/gen-types.mjs",
+    "types:offline": "tsx scripts/gen-types-offline.ts",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.116.0",
+    "pg": "^8.16.0"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "0.5.8",
+    "@hotzonex/shared": "workspace:*",
+    "@types/node": "^24.0.0",
+    "@types/pg": "^8.15.0",
+    "supabase": "^2.117.0",
+    "tsx": "^4.23.13",
+    "typescript": "~6.0.3",
+    "vitest": "^5.0.0"
+  }
+}
