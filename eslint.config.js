@@ -10,6 +10,7 @@ export default tseslint.config(
       '**/node_modules/**',
       '**/dist/**',
       '**/dev-dist/**',
+      '**/dist-ui/**',
       '**/coverage/**',
       '**/playwright-report/**',
       '**/test-results/**',
@@ -47,7 +48,7 @@ export default tseslint.config(
 
   // Architecture guard: the browser never touches router sockets, the service-role key, or Node APIs.
   {
-    files: ['apps/web/**/*.{ts,tsx}'],
+    files: ['apps/web/src/**/*.{ts,tsx}'],
     languageOptions: { globals: { ...globals.browser } },
     plugins: { 'react-hooks': reactHooks },
     rules: {
@@ -78,9 +79,14 @@ export default tseslint.config(
     },
   },
   {
-    files: ['apps/web/e2e/**/*.ts', 'apps/web/playwright.config.ts'],
-    languageOptions: { globals: { ...globals.node } },
-    rules: { 'no-restricted-imports': 'off' },
+    files: ['apps/web/test/**/*.{ts,tsx}'],
+    languageOptions: { globals: { ...globals.browser, ...globals.node } },
+    plugins: { 'react-hooks': reactHooks },
+  },
+  {
+    files: ['apps/web/public/**/*.js'],
+    languageOptions: { globals: { ...globals.browser }, sourceType: 'script' },
+    rules: { 'no-var': 'off' },
   },
 
   {

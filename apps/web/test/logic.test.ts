@@ -1,0 +1,138 @@
+import { describe, expect, it } from 'vitest';
+import { buildUptimeSeries } from '@/components/uptime-bars';
+import { sortRoutersForOps } from '@/components/router-table';
+import { toAppError } from '@/lib/errors';
+import { readEnv } from '@/lib/env';
+import { describeConnector } from '@/lib/queries/misc';
+import { PERSISTED_QUERY_ROOTS, shouldPersist } from '@/lib/query-client';
+import { resumeStep } from '@/lib/wizard';
+import { countRouters } from '@/pages/dashboard';
+
+describe('dashboard counts', () => {
+  it('never counts a DEMO router as a real or online router', () => {
+    const counts = countRouters([
+      { status: 'online', is_demo: true },
+      { status: 'online', is_demo: true },
+      { status: 'online', is_demo: false },
+      { status: 'offline', is_demo: false },
+      { status: 'warning', is_demo: false },
+      { status: 'unknown', is_demo: false },
+    ]);
+    expect(counts).toEqual({ total: 4, online: 1, offline: 1, attention: 1, unknown: 1, demo: 2 });
+  });
+
+  it('puts problems first and demos last', () => {
+    const base = { location: null };
+    const sorted = sortRoutersForOps([
+      { ...base, name: 'b', status: 'online', is_demo: false },
+      { ...base, name: 'demo', status: 'offline', is_demo: true },
+      { ...base, name: 'a', status: 'offline', is_demo: false },
+      { ...base, name: 'c', status: 'warning', is_demo: false },
+    ] as never);
+    expect(sorted.map((r) => r.name)).toEqual(['a', 'c', 'b', 'demo']);
+  });
+});
+
+describe('uptime series', () => {
+  it('lays buckets on a fixed 7-day grid with gaps for missing windows', () => {
+    const now = new Date('2026-09-11T13:00:00Z');
+    const series = buildUptimeSeries(
+      [
+        { router_id: 'r1', bucket_start: '2026-09-11T12:00:00Z', samples: 12, reachable_samples: 12 },
+        { router_id: 'r1', bucket_start: '2026-09-11T06:00:00Z', samples: 12, reachable_samples: 6 },
+        { router_id: 'r2', bucket_start: '2026-09-11T12:00:00Z', samples: 12, reachable_samples: 0 },
+        { router_id: 'r1', bucket_start: '2026-08-01T00:00:00Z', samples: 12, reachable_samples: 0 },
+      ],
+      'r1',
+      now,
+    );
+    expect(series.slots).toHaveLength(28);
+    expect(series.slots[27]).toMatchObject({ samples: 12, reachable: 12 });
+    expect(series.slots[26]).toMatchObject({ samples: 12, reachable: 6 });
+    expect(series.slots.filter(Boolean)).toHaveLength(2);
+    expect(series.ratio).toBe(0.75);
+  });
+
+  it('reports no ratio rather than 0% when there is no data', () => {
+    expect(buildUptimeSeries([], 'r1', new Date()).ratio).toBeNull();
+  });
+});
+
+describe('wizard resume', () => {
+  const base = {
+    credentials_status: 'set',
+    wg_public_key: 'k',
+    is_demo: false,
+    last_seen_at: 'x',
+    discovered_at: 'x',
+    hotspot_server_id: 'h',
+    onboarding_completed_at: null,
+    location_id: 'l',
+  } as const;
+  it.each([
+    [{}, 'finish'],
+    [{ credentials_status: 'not_set' }, 'connect'],
+    [{ credentials_status: 'rejected' }, 'connect'],
+    [{ wg_public_key: null }, 'connect'],
+    [{ last_seen_at: null }, 'test'],
+    [{ discovered_at: null }, 'discover'],
+    [{ hotspot_server_id: null }, 'hotspot'],
+    [{ location_id: null }, 'location'],
+  ])('%j → %s', (patch, step) => {
+    expect(resumeStep({ ...base, ...patch } as never)).toBe(step);
+  });
+  it('starts at details without a router', () => expect(resumeStep(null)).toBe('details'));
+});
+
+describe('user-facing errors', () => {
+  it('maps database hints and auth errors to sentences, never raw text', () => {
+    expect(toAppError({ message: 'x', hint: 'rate_limited' }).userMessage).toMatch(/Too many requests/);
+    expect(toAppError({ message: 'Invalid login credentials', status: 400 }).userMessage).toBe('Email or password is incorrect.');
+    expect(toAppError({ message: 'TypeError: Failed to fetch' }).kind).toBe('network');
+    expect(toAppError({ code: '42501', message: 'permission denied for table router_credentials' }).userMessage).not.toMatch(/router_credentials/);
+    const unknown = toAppError(new Error('relation "public.secret" does not exist at character 15'));
+    expect(unknown.userMessage).not.toMatch(/relation|character|secret/);
+  });
+});
+
+describe('offline cache', () => {
+  it('persists only network-state queries — never credentials, jobs or audit', () => {
+    const q = (key: unknown[], status = 'success') => ({ queryKey: key, state: { status } }) as never;
+    expect(shouldPersist(q(['routers']))).toBe(true);
+    expect(shouldPersist(q(['router', 'abc']))).toBe(true);
+    expect(shouldPersist(q(['jobs', 'one', 'x']))).toBe(false);
+    expect(shouldPersist(q(['audit', {}]))).toBe(false);
+    expect(shouldPersist(q(['team']))).toBe(false);
+    expect(shouldPersist(q(['routers'], 'error'))).toBe(false);
+    expect(PERSISTED_QUERY_ROOTS.some((k) => /cred|password|secret/i.test(k))).toBe(false);
+  });
+});
+
+describe('configuration', () => {
+  it('reports missing variables by name', () => {
+    expect(readEnv({})).toEqual({ ok: false, missing: ['VITE_SUPABASE_URL', 'VITE_SUPABASE_ANON_KEY'] });
+    expect(readEnv({ VITE_SUPABASE_URL: 'http://127.0.0.1:54321', VITE_SUPABASE_ANON_KEY: 'x'.repeat(40) }).ok).toBe(true);
+  });
+});
+
+describe('connector view', () => {
+  it('parses the published sealing key and WireGuard endpoint, and detects staleness', () => {
+    const row = {
+      connector_id: 'vps-1',
+      version: '0.1.0',
+      provider_mode: 'api',
+      sealing_key_id: 'abcdef0123456789',
+      sealing_public_key: { kty: 'EC', crv: 'P-256', x: 'X', y: 'Y' },
+      wg_server_public_key: 'yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=',
+      wg_endpoint: 'wg.hotzonex.com:51820',
+      wg_server_address: '10.77.0.1',
+      started_at: '2026-09-11T10:00:00Z',
+      last_heartbeat_at: '2026-09-11T12:00:00Z',
+    };
+    const fresh = describeConnector(row as never, Date.parse('2026-09-11T12:00:30Z'));
+    expect(fresh).toMatchObject({ online: true, mock: false, wg: { endpointHost: 'wg.hotzonex.com', endpointPort: 51820 } });
+    expect(fresh.sealingKey).toEqual({ kid: 'abcdef0123456789', jwk: { kty: 'EC', crv: 'P-256', x: 'X', y: 'Y' } });
+    expect(describeConnector(row as never, Date.parse('2026-09-11T12:05:00Z')).online).toBe(false);
+    expect(describeConnector(null).sealingKey).toBeNull();
+  });
+});

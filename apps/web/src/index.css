@@ -1,0 +1,169 @@
+@import 'tailwindcss';
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+ * Hotzonex Cloud design tokens. Calm neutral surfaces, one blue accent, and a
+ * reserved status palette (good / warning / serious / critical) that always
+ * ships with an icon and a label, never color alone.
+ */
+:root {
+  color-scheme: light;
+  --background: #f6f6f4;
+  --foreground: #0b0b0b;
+  --card: #ffffff;
+  --card-foreground: #0b0b0b;
+  --popover: #ffffff;
+  --popover-foreground: #0b0b0b;
+  --primary: #1c5cab;
+  --primary-foreground: #ffffff;
+  --secondary: #eeede9;
+  --secondary-foreground: #1b1b1a;
+  --muted: #efeeea;
+  --muted-foreground: #5c5b57;
+  --accent: #eaf1fb;
+  --accent-foreground: #0d366b;
+  --destructive: #c42f2f;
+  --destructive-foreground: #ffffff;
+  --border: #e1e0d9;
+  --input: #d6d5ce;
+  --ring: #2a78d6;
+  --sidebar: #12355f;
+  --sidebar-foreground: #dbe6f4;
+  --sidebar-muted: #9eb3cf;
+  --sidebar-active: #1d4a80;
+
+  --status-good: #0ca30c;
+  --status-warning: #fab219;
+  --status-serious: #ec835a;
+  --status-critical: #d03b3b;
+  --status-unknown: #898781;
+  --status-good-bg: #e7f6e7;
+  --status-warning-bg: #fff4dc;
+  --status-serious-bg: #fdece5;
+  --status-critical-bg: #fbe9e9;
+  --status-unknown-bg: #efeeea;
+
+  /* Data viz: single-series accent (uptime bars) + chrome. */
+  --viz-accent: #2a78d6;
+  --viz-empty: #e1e0d9;
+  --success-text: #006300;
+
+  --radius: 0.5rem;
+}
+
+.dark {
+  color-scheme: dark;
+  --background: #0d0d0d;
+  --foreground: #f4f4f2;
+  --card: #1a1a19;
+  --card-foreground: #f4f4f2;
+  --popover: #1f1f1e;
+  --popover-foreground: #f4f4f2;
+  --primary: #6da7ec;
+  --primary-foreground: #06172d;
+  --secondary: #262625;
+  --secondary-foreground: #ededea;
+  --muted: #232322;
+  --muted-foreground: #aeada5;
+  --accent: #16263b;
+  --accent-foreground: #cde2fb;
+  --destructive: #e66767;
+  --destructive-foreground: #1a0606;
+  --border: #2c2c2a;
+  --input: #383835;
+  --ring: #5598e7;
+  --sidebar: #111b28;
+  --sidebar-foreground: #d4dfee;
+  --sidebar-muted: #8397b3;
+  --sidebar-active: #1b2c44;
+
+  --status-good-bg: #0f2a10;
+  --status-warning-bg: #2e2408;
+  --status-serious-bg: #33190f;
+  --status-critical-bg: #331414;
+  --status-unknown-bg: #262625;
+
+  --viz-accent: #3987e5;
+  --viz-empty: #2c2c2a;
+  --success-text: #0ca30c;
+}
+
+@theme inline {
+  --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: ui-monospace, 'Cascadia Code', 'SF Mono', Menlo, Consolas, monospace;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-muted: var(--sidebar-muted);
+  --color-sidebar-active: var(--sidebar-active);
+  --color-status-good: var(--status-good);
+  --color-status-warning: var(--status-warning);
+  --color-status-serious: var(--status-serious);
+  --color-status-critical: var(--status-critical);
+  --color-status-unknown: var(--status-unknown);
+  --color-status-good-bg: var(--status-good-bg);
+  --color-status-warning-bg: var(--status-warning-bg);
+  --color-status-serious-bg: var(--status-serious-bg);
+  --color-status-critical-bg: var(--status-critical-bg);
+  --color-status-unknown-bg: var(--status-unknown-bg);
+  --color-viz-accent: var(--viz-accent);
+  --color-viz-empty: var(--viz-empty);
+  --color-success-text: var(--success-text);
+  --radius-sm: calc(var(--radius) - 2px);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 2px);
+  --radius-xl: calc(var(--radius) + 6px);
+}
+
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    background: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    -webkit-font-smoothing: antialiased;
+  }
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+@utility tabular {
+  font-variant-numeric: tabular-nums;
+}

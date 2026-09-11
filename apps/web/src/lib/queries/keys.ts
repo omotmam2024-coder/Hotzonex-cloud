@@ -1,0 +1,20 @@
+/** Query key factory. The first segment decides persistence (see query-client.ts). */
+export const qk = {
+  routers: () => ['routers'] as const,
+  router: (id: string) => ['router', id] as const,
+  routerInterfaces: (id: string) => ['router', id, 'interfaces'] as const,
+  routerHotspot: (id: string) => ['router', id, 'hotspot'] as const,
+  routerDrift: (id: string) => ['router', id, 'drift'] as const,
+  routerMetrics: (id: string) => ['router', id, 'metrics'] as const,
+  routerJobs: (id: string) => ['jobs', 'router', id] as const,
+  job: (id: string) => ['jobs', 'one', id] as const,
+  jobs: () => ['jobs'] as const,
+  locations: () => ['locations'] as const,
+  uptime: (days: number) => ['uptime', days] as const,
+  connector: () => ['connector'] as const,
+  audit: (filters: unknown) => ['audit', filters] as const,
+  settings: () => ['settings'] as const,
+  team: () => ['team'] as const,
+  invites: () => ['invites'] as const,
+  jobTypes: () => ['job_types'] as const,
+};

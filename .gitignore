@@ -12,6 +12,7 @@ pnpm-debug.log*
 
 # web
 apps/web/dev-dist
+apps/web/dist-ui
 apps/web/playwright-report
 apps/web/test-results
 

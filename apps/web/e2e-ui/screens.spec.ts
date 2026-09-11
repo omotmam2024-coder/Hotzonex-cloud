@@ -1,0 +1,127 @@
+import { expect, test, type Page } from '@playwright/test';
+import { installMockBackend } from './mock-backend';
+
+async function signIn(page: Page): Promise<void> {
+  await page.goto('/login');
+  await page.getByLabel('Email').fill('admin@hotzonex.com');
+  await page.getByLabel('Password').fill('CorrectPassword1');
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible();
+}
+
+async function expectNoHorizontalScroll(page: Page): Promise<void> {
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  expect(overflow, 'page must not scroll horizontally').toBeLessThanOrEqual(0);
+}
+
+async function shot(page: Page, name: string): Promise<void> {
+  await page.waitForTimeout(250);
+  await page.screenshot({ path: `test-results/ui/screens/${test.info().project.name}-${name}.png`, fullPage: true });
+}
+
+test.beforeEach(async ({ page }) => {
+  await installMockBackend(page);
+});
+
+test('login rejects a wrong password with a plain sentence', async ({ page }) => {
+  await page.goto('/login');
+  await expect(page.getByText('MikroTik Hotspot Management & WiFi Platform')).toBeVisible();
+  await page.getByLabel('Email').fill('admin@hotzonex.com');
+  await page.getByLabel('Password').fill('wrong-password');
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page.getByRole('alert')).toHaveText('Email or password is incorrect.');
+  await expectNoHorizontalScroll(page);
+  await shot(page, 'login');
+});
+
+test('dashboard: real counts exclude demo routers; problems first; uptime bars', async ({ page }) => {
+  await signIn(page);
+  const tiles = page.locator('section').filter({ hasText: /^Routers/ }).first();
+  await expect(tiles).toContainText('4');
+  await expect(page.getByText('+1 demo, not counted')).toBeVisible();
+  await expect(page.locator('section').filter({ hasText: /^Online/ }).first()).toContainText('1');
+  await expect(page.locator('section').filter({ hasText: /^Offline/ }).first()).toContainText('1');
+  // Table on desktop, cards on phones: check whichever is visible.
+  const firstRouter = page.locator('tbody tr, ul > li').filter({ visible: true }).first();
+  await expect(firstRouter).toContainText('Gorom Market');
+  await expect(firstRouter).toContainText('Offline');
+  await expect(firstRouter).toContainText('Router unreachable');
+  await expect(firstRouter).not.toContainText('ehostunreach');
+  await expect(page.getByRole('img', { name: /Lologo Gate: .*% uptime over 7 days/ }).filter({ visible: true })).toBeVisible();
+  await expect(page.getByText('Demo', { exact: true }).filter({ visible: true }).first()).toBeVisible();
+  await expectNoHorizontalScroll(page);
+  await shot(page, 'dashboard');
+});
+
+test('routers list and router detail tabs', async ({ page }) => {
+  await signIn(page);
+  await page.goto('/routers');
+  await expect(page.getByRole('heading', { name: 'Routers' })).toBeVisible();
+  await expectNoHorizontalScroll(page);
+  await shot(page, 'routers');
+
+  await page.goto('/routers/r-1');
+  await expect(page.getByRole('heading', { name: 'Lologo Gate' })).toBeVisible();
+  await expect(page.getByText('Credentials set')).toBeVisible();
+  await page.getByRole('button', { name: 'Test connection' }).click();
+  await expect(page.getByText(/Connected and logged in/)).toBeVisible();
+  await expectNoHorizontalScroll(page);
+  await shot(page, 'router-overview');
+
+  await page.getByRole('tab', { name: 'System' }).click();
+  await expect(page.getByText('cpu-temperature')).toBeVisible();
+  await shot(page, 'router-system');
+  await page.getByRole('tab', { name: 'Hotspot discovery' }).click();
+  await expect(page.getByText('Drift detected')).toBeVisible();
+  await expectNoHorizontalScroll(page);
+  await shot(page, 'router-hotspot');
+});
+
+test('onboarding wizard shows the RouterOS script with the router’s own addresses', async ({ page }) => {
+  await signIn(page);
+  await page.goto('/routers/r-4/onboard');
+  await expect(page.getByText('1. Run this script on the router')).toBeVisible();
+  const script = page.getByLabel('RouterOS setup script');
+  await expect(script).toContainText('address=10.77.0.5/32 network=10.77.0.1');
+  await expect(script).toContainText('endpoint-address=wg.hotzonex.com endpoint-port=51820');
+  await expect(script).toContainText('policy=read,write,api,test');
+  await expect(page.getByText('Credentials encrypted and stored by the connector.')).toBeVisible();
+  // The generated password is visible in the script but must never be persisted by the browser.
+  const text = (await script.textContent()) ?? '';
+  const password = /password="([A-Za-z0-9]+)"/.exec(text)?.[1];
+  expect(password).toMatch(/^[A-Za-z0-9]{32}$/);
+  const stored = await page.evaluate(() => JSON.stringify({ local: { ...localStorage }, session: { ...sessionStorage }, cookies: document.cookie }));
+  expect(stored).not.toContain(password as string);
+  await expectNoHorizontalScroll(page);
+  await shot(page, 'wizard-connect');
+});
+
+test('locations, audit and settings render', async ({ page }) => {
+  await signIn(page);
+  await page.goto('/locations');
+  await expect(page.getByText('Hotzonex Lologo One')).toBeVisible();
+  await expectNoHorizontalScroll(page);
+  await shot(page, 'locations');
+  await page.getByRole('button', { name: 'Hotzonex Lologo One', exact: true }).click();
+  await expect(page.getByRole('dialog')).toContainText('Assigned routers');
+  await shot(page, 'location-panel');
+  await page.keyboard.press('Escape');
+
+  await page.goto('/audit');
+  await expect(page.getByText('Connection test requested')).toBeVisible();
+  await expectNoHorizontalScroll(page);
+  await shot(page, 'audit');
+
+  await page.goto('/settings?tab=system');
+  await expect(page.getByText('vps-juba-1')).toBeVisible();
+  await expectNoHorizontalScroll(page);
+  await shot(page, 'settings');
+});
+
+test('dark mode is selectable and applied', async ({ page }) => {
+  await signIn(page);
+  await page.getByRole('button', { name: 'Account menu' }).click();
+  await page.getByRole('menuitem', { name: 'Dark' }).click();
+  await expect(page.locator('html')).toHaveClass(/dark/);
+  await shot(page, 'dashboard-dark');
+});
