@@ -156,7 +156,7 @@ function OverviewTab({ router, poll }: { router: RouterWithLocation; poll: numbe
           <Facts
             items={[
               { label: 'Status', value: <StatusBadge status={router.status} /> },
-              { label: 'Last seen', value: <LastSeen value={router.last_seen_at} pollIntervalSeconds={poll} /> },
+              { label: 'Last seen', value: <LastSeen value={router.last_seen_at} pollIntervalSeconds={poll} status={router.status} /> },
               { label: 'Reason', value: humanStatusReason(router.status_reason) ?? '—' },
               { label: 'Last poll', value: <RelativeTime value={router.last_polled_at} /> },
               { label: 'Location', value: router.location?.name ?? 'Unassigned' },

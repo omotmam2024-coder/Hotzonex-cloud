@@ -54,7 +54,9 @@ export class ConfigError extends Error {
 
 /** Parse env; on failure, list every problem by variable name (never echoing values). */
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): ConnectorConfig {
-  const result = schema.safeParse(env);
+  // `.env.example` ships optional keys as `NAME=`; an empty value means "not set", not "invalid".
+  const present = Object.fromEntries(Object.entries(env).filter(([, v]) => v !== undefined && v.trim() !== ''));
+  const result = schema.safeParse(present);
   if (!result.success) {
     const lines = result.error.issues.map((i) => {
       const name = i.path.join('.') || '(env)';

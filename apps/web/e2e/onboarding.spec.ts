@@ -60,8 +60,8 @@ test('admin onboards a router end to end, and every step is audited', async ({ p
   await page.getByRole('button', { name: 'Use a simulated tunnel key' }).click();
   await page.getByRole('button', { name: 'Continue' }).click();
 
-  // 4. Test the connection.
-  await page.getByRole('button', { name: 'Test connection' }).click();
+  // 4. Test the connection. (exact: the wizard's step indicator is also a button, labelled "3 Test connection".)
+  await page.getByRole('button', { name: 'Test connection', exact: true }).click();
   await expect(page.getByText(/Connected and logged in/)).toBeVisible();
   await page.getByRole('button', { name: 'Continue' }).click();
 
@@ -78,7 +78,7 @@ test('admin onboards a router end to end, and every step is audited', async ({ p
   // Location.
   await page.getByLabel('Location').selectOption({ label: locationName });
   await page.getByRole('button', { name: 'Save and continue' }).click();
-  await page.getByRole('button', { name: 'Finish' }).click();
+  await page.getByRole('button', { name: 'Finish', exact: true }).click();
 
   // Router page shows the discovered facts.
   await expect(page.getByRole('heading', { name: routerName })).toBeVisible();
@@ -104,7 +104,7 @@ test('admin onboards a router end to end, and every step is audited', async ({ p
   await page.getByRole('dialog').getByRole('button', { name: 'Encrypt and save' }).click();
   await expect(page.getByText(/Stored\. Run “Test connection”/)).toBeVisible();
   await page.keyboard.press('Escape');
-  await page.getByRole('button', { name: 'Test connection' }).click();
+  await page.getByRole('button', { name: 'Test connection', exact: true }).click();
   await expect(page.getByText(/Connected and logged in/)).toBeVisible();
 
   // ...then prove neither password came back from any API response or sits in browser storage.

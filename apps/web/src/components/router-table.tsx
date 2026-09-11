@@ -79,7 +79,7 @@ export function RouterTable({
             {has('location') && <TD className="whitespace-nowrap">{r.location?.name ?? <span className="text-muted-foreground">Unassigned</span>}</TD>}
             {has('lastSeen') && (
               <TD>
-                <LastSeen value={r.last_seen_at} pollIntervalSeconds={pollIntervalSeconds} />
+                <LastSeen value={r.last_seen_at} pollIntervalSeconds={pollIntervalSeconds} status={r.status} />
               </TD>
             )}
             {has('tunnel') && (
@@ -153,7 +153,7 @@ function RouterCards({
             ) : null}
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
               <span className="inline-flex items-center gap-1">
-                Last seen <LastSeen value={r.last_seen_at} pollIntervalSeconds={pollIntervalSeconds} />
+                Last seen <LastSeen value={r.last_seen_at} pollIntervalSeconds={pollIntervalSeconds} status={r.status} />
               </span>
               {has('version') && r.routeros_version ? <span>RouterOS {r.routeros_version}</span> : null}
               {has('cpu') && r.cpu_load !== null ? <span>CPU {r.cpu_load}%</span> : null}

@@ -63,6 +63,14 @@ describe('config', () => {
     expect(c).toMatchObject({ MIKROTIK_PROVIDER: 'mock', HEALTH_POLL_INTERVAL_SECONDS: 300, JOB_POLL_INTERVAL_SECONDS: 10, WG_INTERFACE: 'wg0' });
   });
 
+  it('treats empty values copied from .env.example as unset', () => {
+    const c = loadConfig({ ...good, CONNECTOR_ID: '', WG_SERVER_PUBLIC_KEY: '', WG_ENDPOINT: '  ', ENCRYPTION_KEYS_RETIRED: '' });
+    expect(c.WG_SERVER_PUBLIC_KEY).toBeUndefined();
+    expect(c.WG_ENDPOINT).toBeUndefined();
+    expect(c.CONNECTOR_ID).toMatch(/^[A-Za-z0-9._-]{1,64}$/);
+    expect(() => loadConfig({ ...good, SUPABASE_SERVICE_ROLE_KEY: '' })).toThrow(/SUPABASE_SERVICE_ROLE_KEY: is required/);
+  });
+
   it('lists problems by name without echoing secret values', () => {
     try {
       loadConfig({ ...good, ENCRYPTION_KEY: 'short-secret-value', MIKROTIK_PROVIDER: 'api' });

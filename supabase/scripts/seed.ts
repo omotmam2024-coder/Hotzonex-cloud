@@ -29,7 +29,10 @@ function required(name: string): string {
 
 const supabaseUrl = required('SUPABASE_URL');
 const serviceRoleKey = required('SUPABASE_SERVICE_ROLE_KEY');
-const dbUrl = process.env['SUPABASE_DB_URL'] ?? 'postgresql://postgres:postgres@127.0.0.1:54322/postgres';
+// Optional: with a direct connection the script applies seed.sql itself. Without one
+// (e.g. a hosted project where seed.sql was run in the SQL editor), it only
+// provisions the admin login, through the API.
+const dbUrl = process.env['SUPABASE_DB_URL'];
 const password = required('SEED_ADMIN_PASSWORD');
 const pw = passwordSchema.safeParse(password);
 if (!pw.success) {
@@ -37,20 +40,29 @@ if (!pw.success) {
   process.exit(1);
 }
 
-const client = new pg.Client({ connectionString: dbUrl });
-try {
-  await client.connect();
-} catch (error) {
-  console.error(`✖ Cannot connect to the database at ${dbUrl.replace(/:[^:@/]+@/, ':****@')}: ${(error as Error).message}`);
-  console.error('  Run `pnpm db:migrate` first, or set SUPABASE_DB_URL.');
-  process.exit(1);
+const client = dbUrl ? new pg.Client({ connectionString: dbUrl }) : null;
+if (client) {
+  try {
+    await client.connect();
+  } catch (error) {
+    console.error(`✖ Cannot connect to the database at ${(dbUrl as string).replace(/:[^:@/]+@/, ':****@')}: ${(error as Error).message}`);
+    console.error('  Run `pnpm db:migrate` first, or unset SUPABASE_DB_URL if seed.sql is already applied.');
+    process.exit(1);
+  }
 }
 
-try {
-  await client.query(readFileSync(join(here, '..', 'seed.sql'), 'utf8'));
-  console.log('✔ Seed data applied (tenant, 3 locations, 3 DEMO routers).');
+const admin = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false, autoRefreshToken: false } });
 
-  const admin = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false, autoRefreshToken: false } });
+try {
+  if (client) {
+    await client.query(readFileSync(join(here, '..', 'seed.sql'), 'utf8'));
+    console.log('✔ Seed data applied (tenant, 3 locations, 3 DEMO routers).');
+  } else {
+    const { data, error } = await admin.from('tenants').select('id').eq('id', TENANT_ID).maybeSingle();
+    if (error) throw new Error(`checking the seed tenant failed: ${error.message}`, { cause: error });
+    if (!data) throw new Error('the seed tenant is missing: run supabase/seed.sql first (SQL editor), or set SUPABASE_DB_URL');
+    console.log('✔ Seed data already present (SUPABASE_DB_URL not set, so seed.sql was not re-run).');
+  }
 
   let userId: string | null = null;
   for (let page = 1; page < 50 && !userId; page++) {
@@ -80,16 +92,16 @@ try {
     console.log(`✔ Created ${ADMIN_EMAIL}.`);
   }
 
-  await client.query(
-    `insert into public.profiles (id, tenant_id, email, full_name, role, status)
-     values ($1, $2, $3, 'Hotzonex Administrator', 'SUPER_ADMIN', 'active')
-     on conflict (id) do update set tenant_id = excluded.tenant_id, role = 'SUPER_ADMIN', status = 'active'`,
-    [userId, TENANT_ID, ADMIN_EMAIL],
+  // Service role: bypasses RLS, and has full grants on profiles.
+  const { error: profileError } = await admin.from('profiles').upsert(
+    { id: userId, tenant_id: TENANT_ID, email: ADMIN_EMAIL, full_name: 'Hotzonex Administrator', role: 'SUPER_ADMIN', status: 'active' },
+    { onConflict: 'id' },
   );
+  if (profileError) throw new Error(`creating the admin profile failed: ${profileError.message}`, { cause: profileError });
   console.log('✔ SUPER_ADMIN profile ready. Sign in with admin@hotzonex.com and SEED_ADMIN_PASSWORD.');
 } catch (error) {
   console.error(`✖ Seeding failed: ${(error as Error).message}`);
   process.exitCode = 1;
 } finally {
-  await client.end();
+  await client?.end();
 }

@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { RouterForm } from '@/components/router-form';
 import { DemoBadge, StatusBadge } from '@/components/status';
 import { ErrorState } from '@/components/states';
+import { LastSeen } from '@/components/time';
 import { TooltipProvider } from '@/components/ui/overlays';
 import { UptimeBars, buildUptimeSeries } from '@/components/uptime-bars';
 
@@ -27,6 +28,19 @@ describe('ErrorState', () => {
     render(<ErrorState human={{ title: 'Login rejected', explanation: 'The router rejected the password.', nextAction: 'Run the script again.' }} />);
     expect(screen.getByRole('alert')).toHaveTextContent('Login rejected');
     expect(screen.getByRole('alert')).toHaveTextContent('Run the script again.');
+  });
+});
+
+describe('LastSeen', () => {
+  const twoMinutesAgo = () => new Date(Date.now() - 120_000).toISOString();
+  it('is fresh when recently seen and online', () => {
+    render(<TooltipProvider><LastSeen value={twoMinutesAgo()} pollIntervalSeconds={300} status="online" /></TooltipProvider>);
+    expect(screen.getByText(/Fresh:/)).toBeInTheDocument();
+  });
+  it('never looks fresh for an OFFLINE router, however recent the last contact', () => {
+    render(<TooltipProvider><LastSeen value={twoMinutesAgo()} pollIntervalSeconds={300} status="offline" /></TooltipProvider>);
+    expect(screen.getByText(/Lost contact:/)).toBeInTheDocument();
+    expect(screen.queryByText(/Fresh:/)).not.toBeInTheDocument();
   });
 });
 

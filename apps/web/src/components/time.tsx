@@ -31,10 +31,15 @@ const FRESHNESS_STYLE: Record<Freshness, { dot: string; label: string }> = {
   never: { dot: 'bg-status-unknown', label: 'Never seen' },
 };
 
-/** "Last seen" with a freshness dot relative to the poll interval (dot + words, not color alone). */
-export function LastSeen({ value, pollIntervalSeconds }: { value: string | null; pollIntervalSeconds: number }) {
+/**
+ * "Last seen" with a freshness dot relative to the poll interval (dot + words, not color alone).
+ * An OFFLINE router has lost contact by definition, so its dot is never "fresh" — the web
+ * app cannot know the connector's own default interval, and the two must never disagree.
+ */
+export function LastSeen({ value, pollIntervalSeconds, status }: { value: string | null; pollIntervalSeconds: number; status?: string }) {
   const now = useNow();
-  const f = freshness(value, pollIntervalSeconds, now);
+  const measured = freshness(value, pollIntervalSeconds, now);
+  const f: Freshness = status === 'offline' && value ? 'lost' : measured;
   const s = FRESHNESS_STYLE[f];
   return (
     <span className="inline-flex items-center gap-1.5 whitespace-nowrap">

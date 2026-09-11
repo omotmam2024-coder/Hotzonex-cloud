@@ -344,6 +344,28 @@ describe('invite-only sign-up', () => {
     await expect(signUp('right@a.test', { invite_token: inv!.token })).rejects.toThrow(/invalid, expired/);
   });
 
+  it('accepts an admin-API user whose app_metadata is set after the insert (Supabase Auth createUser)', async () => {
+    // Supabase Auth inserts the row, then sets app_metadata in a second statement of the same transaction.
+    const id = await db.transaction(async (tx) => {
+      const r = await tx.query<{ id: string }>(`insert into auth.users (email) values ('seeded@hq.test') returning id`);
+      const uid = r.rows[0]!.id;
+      await tx.query(`update auth.users set raw_app_meta_data = '{"provisioned_by":"hotzonex-seed"}' where id = $1`, [uid]);
+      return uid;
+    });
+    expect((await db.query(`select 1 from auth.users where id = $1`, [id])).rows).toHaveLength(1);
+    // The seed script creates the profile itself; the trigger must not.
+    expect((await db.query(`select 1 from public.profiles where id = $1`, [id])).rows).toHaveLength(0);
+
+    // Without the marker the same two-step write is still rejected, and nothing is left behind.
+    await expect(
+      db.transaction(async (tx) => {
+        await tx.query(`insert into auth.users (email) values ('sneaky@hq.test')`);
+        await tx.query(`update auth.users set raw_app_meta_data = '{"provider":"email"}' where email = 'sneaky@hq.test'`);
+      }),
+    ).rejects.toThrow(/invite-only/);
+    expect((await db.query(`select 1 from auth.users where email = 'sneaky@hq.test'`)).rows).toHaveLength(0);
+  });
+
   it('technicians cannot invite; invites can only grant ADMIN or TECHNICIAN', async () => {
     await expect(as(db, user(techA), (tx) => rpc(tx, 'create_invite', { p_email: 'x@a.test', p_role: 'TECHNICIAN' }))).rejects.toThrow(/Only an administrator/);
     await expect(as(db, user(adminA), (tx) => rpc(tx, 'create_invite', { p_email: 'x@a.test', p_role: 'SUPER_ADMIN' }))).rejects.toThrow(/Admin or Technician/);
