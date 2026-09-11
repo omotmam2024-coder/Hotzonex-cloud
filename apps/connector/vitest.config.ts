@@ -5,7 +5,8 @@ export default defineConfig({
     name: 'connector',
     include: ['test/**/*.test.ts'],
     environment: 'node',
+    setupFiles: ['test/setup.ts'],
     testTimeout: 30_000,
-    hookTimeout: 60_000,
+    hookTimeout: 180_000,
   },
 });

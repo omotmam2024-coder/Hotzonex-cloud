@@ -77,6 +77,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   });
 
   const signOut = useCallback(async () => {
+    // Recorded server-side by session triggers where available; otherwise the server logs this call (see record_auth_event).
+    await supabase.rpc('record_auth_event', { p_event: 'logout' }).then(() => undefined, () => undefined);
     await supabase.auth.signOut().catch(() => undefined);
     queryClient.clear();
     clearPersistedCache();

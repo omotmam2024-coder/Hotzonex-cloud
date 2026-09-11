@@ -43,6 +43,8 @@ export function LoginPage() {
       form.setValue('password', '');
       return;
     }
+    // Server-side session triggers normally audit sign-in; where they are unavailable the server records this call instead.
+    void getSupabase().rpc('record_auth_event', { p_event: 'login' }).then(() => undefined, () => undefined);
     const from = (location.state as { from?: string } | null)?.from;
     navigate(from && from.startsWith('/') && !from.startsWith('//') ? from : '/', { replace: true });
   });

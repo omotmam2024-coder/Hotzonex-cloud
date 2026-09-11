@@ -231,10 +231,19 @@ exception when others then
   return null;
 end;
 $$;
-create trigger on_auth_session_created after insert on auth.sessions
-  for each row execute function app.audit_session();
-create trigger on_auth_session_deleted after delete on auth.sessions
-  for each row execute function app.audit_session();
+-- Best effort: some Supabase environments may not allow triggers on auth.sessions.
+-- If they cannot be created, sign-in/out is recorded through
+-- public.record_auth_event() instead (see migration …700).
+do $$
+begin
+  create trigger on_auth_session_created after insert on auth.sessions
+    for each row execute function app.audit_session();
+  create trigger on_auth_session_deleted after delete on auth.sessions
+    for each row execute function app.audit_session();
+exception when others then
+  raise warning 'login/logout audit triggers on auth.sessions could not be installed (%); falling back to record_auth_event()', sqlerrm;
+end;
+$$;
 
 revoke all on function app.write_audit(uuid, text, text, text, jsonb, jsonb, uuid, text, text, text) from public;
 revoke all on function app.audit_row_change(), app.audit_credential_submission(), app.audit_job(),

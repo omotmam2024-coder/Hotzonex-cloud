@@ -1314,6 +1314,12 @@ export type Database = {
           state: string
         }[]
       }
+      record_auth_event: {
+        Args: {
+          p_event: string
+        }
+        Returns: undefined
+      }
       resolve_drift: {
         Args: {
           p_drift_id: string

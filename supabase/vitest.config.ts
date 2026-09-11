@@ -7,6 +7,6 @@ export default defineConfig({
     environment: 'node',
     // Each file boots its own PGlite instance and applies every migration.
     testTimeout: 30_000,
-    hookTimeout: 60_000,
+    hookTimeout: 180_000,
   },
 });

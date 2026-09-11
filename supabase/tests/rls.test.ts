@@ -297,8 +297,8 @@ describe('function privileges', () => {
     const authed = rows.rows.filter((r) => r.authed).map((r) => r.name);
     expect(anon).toEqual(['get_invite']);
     expect(authed).toEqual([
-      'create_invite', 'enqueue_router_job', 'get_invite', 'resolve_drift', 'revoke_invite', 'router_uptime_buckets',
-      'submit_router_credentials', 'update_member',
+      'create_invite', 'enqueue_router_job', 'get_invite', 'record_auth_event', 'resolve_drift', 'revoke_invite',
+      'router_uptime_buckets', 'submit_router_credentials', 'update_member',
     ]);
   });
 });
@@ -365,5 +365,29 @@ describe('login / logout audit', () => {
       { action: 'auth.login', ip: '41.79.20.5', user_agent: 'Mozilla/5.0 test', actor_email: 'admin@a.test' },
       { action: 'auth.logout', ip: '41.79.20.5', user_agent: 'Mozilla/5.0 test', actor_email: 'admin@a.test' },
     ]);
+  });
+
+  it('client fallback is a no-op while the server triggers exist (no duplicates, nothing to forge)', async () => {
+    const before = await db.query<{ n: number }>(`select count(*)::int n from public.audit_logs where entity_id = $1 and action like 'auth.%'`, [techA.id]);
+    await as(db, user(techA), (tx) => rpc(tx, 'record_auth_event', { p_event: 'login' }));
+    const after = await db.query<{ n: number }>(`select count(*)::int n from public.audit_logs where entity_id = $1 and action like 'auth.%'`, [techA.id]);
+    expect(after.rows[0]?.n).toBe(before.rows[0]?.n);
+    await expect(as(db, user(techA), (tx) => rpc(tx, 'record_auth_event', { p_event: 'router.deleted' }))).rejects.toThrow(/Unknown event/);
+  });
+
+  it('where the triggers cannot be installed, the fallback records the caller’s own sign-in', async () => {
+    const isolated = await createTestDb();
+    try {
+      const t = await createTenant(isolated, 'fallback');
+      const u = await createUser(isolated, { email: 'fb@x.test', role: 'ADMIN', tenantId: t });
+      await isolated.exec('drop trigger on_auth_session_created on auth.sessions; drop trigger on_auth_session_deleted on auth.sessions;');
+      await as(isolated, { kind: 'user', id: u.id, headers: { 'x-forwarded-for': '41.79.1.1' } }, (tx) => rpc(tx, 'record_auth_event', { p_event: 'login' }));
+      const log = await isolated.query<{ action: string; actor_email: string; entity_id: string; ip: string }>(
+        `select action, actor_email, entity_id, ip from public.audit_logs where action like 'auth.%'`,
+      );
+      expect(log.rows).toEqual([{ action: 'auth.login', actor_email: 'fb@x.test', entity_id: u.id, ip: '41.79.1.1' }]);
+    } finally {
+      await isolated.close();
+    }
   });
 });
