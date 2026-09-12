@@ -1,7 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "vite",
-  "buildCommand": "R=$(git rev-parse --show-toplevel); echo \"CWD=$(pwd) ROOT=$R\"; pnpm --filter @hotzonex/web build; rm -rf \"$R/dist\"; cp -r \"$R/apps/web/dist\" \"$R/dist\"; echo 'root listing:'; ls -la \"$R\"; echo 'dist listing:'; ls -la \"$R/dist\"",
+  "buildCommand": "set -e; R=$(git rev-parse --show-toplevel); pnpm --filter @hotzonex/web build; SRC=\"$R/apps/web/dist\"; DEST=\"$(pwd)/dist\"; if [ \"$SRC\" != \"$DEST\" ]; then rm -rf \"$DEST\"; cp -r \"$SRC\" \"$DEST\"; fi; ls \"$DEST/index.html\"",
   "outputDirectory": "dist",
   "rewrites": [
     { "source": "/(.*)", "destination": "/index.html" }
