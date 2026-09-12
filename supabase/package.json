@@ -5,7 +5,7 @@
   "type": "module",
   "description": "Supabase migrations, RLS policies, seed data, and database tests.",
   "exports": {
-    "./testing": "./tests/harness.ts"
+    "./testing": "./scripts/tests/harness.ts"
   },
   "scripts": {
     "migrate": "node scripts/migrate.mjs",

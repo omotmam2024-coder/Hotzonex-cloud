@@ -131,7 +131,7 @@ claim lease (5 min) expires on a crashed connector ──▶ another connector r
 
 Proof lives in tests: `apps/connector/test/credentials.test.ts` (password absent
 from every table readable by users, from the whole database except as
-ciphertext, and from all log output), `supabase/tests/rls.test.ts` (no API role can
+ciphertext, and from all log output), `supabase/scripts/tests/rls.test.ts` (no API role can
 read the credential tables or call the functions that return ciphertext),
 `apps/web/e2e/onboarding.spec.ts` (absent from every network response and browser
 storage), `apps/web/e2e-ui/screens.spec.ts` (generated password not persisted).

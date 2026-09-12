@@ -22,6 +22,12 @@ Every router operation is a queued job, so offline routers are normal, not error
 
 Prerequisites: Node ≥ 22, pnpm 10, **Docker** (for the local Supabase stack).
 
+> Windows PowerShell note: if `pnpm` fails with `UnauthorizedAccess` / `SecurityError` when it tries to run `pnpm.ps1`, either:
+> - run `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`, then reopen the terminal, or
+> - use `pnpm.cmd` explicitly for commands such as `pnpm.cmd install`, `pnpm.cmd test`, and `pnpm.cmd build`.
+>
+> This is an environment issue with the PowerShell wrapper, not a project-code failure.
+
 ```bash
 pnpm install
 cp supabase/.env.example supabase/.env           # set SEED_ADMIN_PASSWORD
