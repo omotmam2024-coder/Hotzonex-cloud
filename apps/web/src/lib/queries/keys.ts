@@ -12,6 +12,7 @@ export const qk = {
   locations: () => ['locations'] as const,
   uptime: (days: number) => ['uptime', days] as const,
   connector: () => ['connector'] as const,
+  connectors: () => ['connectors'] as const,
   audit: (filters: unknown) => ['audit', filters] as const,
   settings: () => ['settings'] as const,
   team: () => ['team'] as const,

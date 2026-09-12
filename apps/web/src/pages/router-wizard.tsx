@@ -25,7 +25,7 @@ import { Facts, Skeleton } from '@/components/ui/surface';
 import { WizardAction, WizardFooter, WizardHeader, WizardNote, WizardScreen } from '@/components/wizard-ui';
 import { useAuth } from '@/lib/auth';
 import { useEnqueueJob, useSubmitCredentials } from '@/lib/queries/jobs';
-import { useAssignRouterLocation, useConnector, useLocations, type ConnectorView } from '@/lib/queries/misc';
+import { useAssignRouterLocation, useConnector, useConnectors, useLocations, type ConnectorView } from '@/lib/queries/misc';
 import {
   useConnectRouter,
   useCreateRouter,
@@ -56,6 +56,13 @@ function ConnectStep({
   const { profile } = useAuth();
   const connect = useConnectRouter();
   const reconnect = useReconnectRouter(router?.id ?? '');
+  const connectors = useConnectors();
+
+  // Each connector seals to its own key, so the password must be sealed to the
+  // one that will open it — the one on the router's network.
+  const choices = (connectors.data ?? []).filter((c) => c.row).map((c) => ({ id: c.row!.connector_id, online: c.online }));
+  const keyFor = (connectorId: string | null) =>
+    (connectorId ? connectors.data?.find((c) => c.row?.connector_id === connectorId) : undefined)?.sealingKey ?? connector?.sealingKey ?? null;
 
   if (connector?.row && !connector.sealingKey) {
     return (
@@ -70,15 +77,13 @@ function ConnectStep({
   }
 
   const submit = (values: RouterConnectionInput) => {
+    const sealingKey = keyFor(values.connector_id);
     if (router) {
-      reconnect.mutate({ input: values, sealingKey: connector?.sealingKey ?? null }, { onSuccess: () => onConnected(router.id) });
+      reconnect.mutate({ input: values, sealingKey }, { onSuccess: () => onConnected(router.id) });
       return;
     }
     if (!profile) return;
-    connect.mutate(
-      { input: values, tenantId: profile.tenant_id, sealingKey: connector?.sealingKey ?? null },
-      { onSuccess: ({ routerId }) => onConnected(routerId) },
-    );
+    connect.mutate({ input: values, tenantId: profile.tenant_id, sealingKey }, { onSuccess: ({ routerId }) => onConnected(routerId) });
   };
 
   const active = router ? reconnect : connect;
@@ -95,7 +100,19 @@ function ConnectStep({
       >
         <RouterConnectForm
           id={CONNECT_FORM}
-          defaults={router ? { name: router.name, host: router.host, api_protocol: router.api_protocol, api_port: router.api_port, use_ssl: router.use_ssl } : undefined}
+          connectors={choices}
+          defaults={
+            router
+              ? {
+                  name: router.name,
+                  host: router.host,
+                  api_protocol: router.api_protocol,
+                  api_port: router.api_port,
+                  use_ssl: router.use_ssl,
+                  connector_id: router.connector_id,
+                }
+              : undefined
+          }
           lockName={Boolean(router)}
           onSubmit={submit}
           pending={active.isPending}

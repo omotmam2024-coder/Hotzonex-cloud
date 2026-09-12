@@ -178,6 +178,7 @@ export function useConnectRouter() {
             api_port: input.api_port,
             use_ssl: input.use_ssl,
             notes: input.notes,
+            connector_id: input.connector_id,
           })
           .select('id')
           .single(),
@@ -235,7 +236,13 @@ export function useReconnectRouter(routerId: string) {
       const db = getSupabase();
       const { error } = await db
         .from('routers')
-        .update({ host: input.host, api_protocol: input.api_protocol, api_port: input.api_port, use_ssl: input.use_ssl })
+        .update({
+          host: input.host,
+          api_protocol: input.api_protocol,
+          api_port: input.api_port,
+          use_ssl: input.use_ssl,
+          connector_id: input.connector_id,
+        })
         .eq('id', routerId);
       if (error) throw toAppError(error);
 

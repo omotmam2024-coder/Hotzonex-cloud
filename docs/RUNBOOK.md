@@ -128,10 +128,31 @@ address on the router's row. That is what picks the onboarding path, not taste:
   (`/routers/new?mode=tunnel`): the setup script puts the router on WireGuard, it
   dials out to the VPS, and the connector reaches it at `10.77.x.y`.
 
-Running both is normal: a connector on the office LAN for local routers, and one
-on the VPS for the tunnelled fleet. Each claims jobs for the routers it can
-reach; a job for an unreachable router simply fails its connection test and can
-be retried from the router page.
+**One connector per site.** Each router names the connector responsible for it
+(`routers.connector_id`), and a connector only claims jobs and polls routers it
+is named on — plus any router not assigned to one, so a single-connector install
+needs no change. Two things make this necessary rather than tidy:
+
+- Sites are separate networks, and the addresses collide: every MikroTik ships
+  as `192.168.88.1`, so "the router at 192.168.88.1" is only meaningful together
+  with which connector is asking.
+- Each connector derives its sealing key from its own `ENCRYPTION_KEY`, so a
+  password sealed to one connector cannot be opened by another, and the
+  ciphertext it stores is encrypted under that key. A router's credentials are
+  readable only by its own connector.
+
+Give each site's connector a stable name and it appears in the
+**Site connector** picker when adding a router:
+
+```bash
+CONNECTOR_ID=site-juba-market   # per site; defaults to the machine hostname
+```
+
+Run as many as there are sites. They share one Supabase project and never
+collide: each takes only its own work.
+
+Running a VPS connector alongside them is normal — it serves the tunnelled
+fleet while each site connector serves its own LAN.
 
 ### 2.4 Connector on a VPS
 

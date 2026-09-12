@@ -104,10 +104,12 @@ export class ConnectorStore {
     return rows[0] ?? null;
   }
 
-  async routersDue(defaultIntervalSeconds: number, limit: number): Promise<DueRouter[]> {
+  /** Only routers this connector is responsible for, plus any not yet assigned to one. */
+  async routersDue(defaultIntervalSeconds: number, limit: number, connectorId: string): Promise<DueRouter[]> {
     return (await this.t.rows('connector_routers_due', {
       p_default_interval_seconds: defaultIntervalSeconds,
       p_limit: limit,
+      p_connector_id: connectorId,
     })) as DueRouter[];
   }
 

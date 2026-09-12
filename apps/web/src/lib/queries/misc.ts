@@ -105,6 +105,27 @@ export function describeConnector(row: ConnectorStatusRow | null, now = Date.now
   return { row, online, mock: row.provider_mode === 'mock', sealingKey, wg };
 }
 
+/**
+ * Every connector that has reported in, newest heartbeat first.
+ *
+ * Sites are separate networks with their own connector, and each connector
+ * seals credentials to its own key, so adding a router means choosing which one
+ * is responsible for it — and sealing the password to *that* one.
+ */
+export function useConnectors() {
+  useRealtimeInvalidate('connector_status', [qk.connectors()]);
+  return useQuery({
+    queryKey: qk.connectors(),
+    refetchInterval: 30_000,
+    queryFn: async () => {
+      const { data, error } = await getSupabase().from('connector_status').select('*').order('last_heartbeat_at', { ascending: false });
+      if (error) throw toAppError(error);
+      return (data ?? []) as ConnectorStatusRow[];
+    },
+    select: (rows) => rows.map((r) => describeConnector(r)),
+  });
+}
+
 export function useConnector() {
   useRealtimeInvalidate('connector_status', [qk.connector()]);
   return useQuery({

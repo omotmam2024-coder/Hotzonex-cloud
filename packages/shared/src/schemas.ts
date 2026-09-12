@@ -143,6 +143,18 @@ export const routerConnectionSchema = z.object({
   username: z.string().trim().min(1, 'Enter the router’s username.').max(64, 'Username is too long.'),
   password: z.string().max(128, 'Password is too long.'),
   notes: optionalText(2000),
+  /**
+   * The connector on this router's network. It opens the connection, and the
+   * password is sealed to its key, so the wrong one cannot reach the router or
+   * read the credentials. Empty means "whichever connector is running".
+   */
+  connector_id: z
+    .string()
+    .trim()
+    .max(64)
+    .regex(/^[A-Za-z0-9._-]*$/, 'That is not a connector name.')
+    .transform((v) => (v === '' ? null : v))
+    .nullable(),
 });
 export type RouterConnectionInput = z.infer<typeof routerConnectionSchema>;
 

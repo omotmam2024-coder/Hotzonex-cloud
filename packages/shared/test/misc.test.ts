@@ -98,13 +98,32 @@ describe('boundary schemas', () => {
   });
 
   describe('adding a router on the local network', () => {
-    const base = { name: 'Gate', host: '192.168.88.1', api_protocol: 'api', api_port: 8728, use_ssl: false, username: 'admin', password: 'secret', notes: '' };
+    const base = {
+      name: 'Gate',
+      host: '192.168.88.1',
+      api_protocol: 'api',
+      api_port: 8728,
+      use_ssl: false,
+      username: 'admin',
+      password: 'secret',
+      notes: '',
+      connector_id: 'site-juba',
+    };
 
     it('takes an address, a username and a password that may be blank', () => {
       expect(routerConnectionSchema.parse(base)).toMatchObject({ host: '192.168.88.1', username: 'admin' });
       // Older boards ship with no password at all; refusing one would lock the technician out of the flow.
       expect(routerConnectionSchema.safeParse({ ...base, password: '' }).success).toBe(true);
       expect(routerConnectionSchema.safeParse({ ...base, username: '' }).success).toBe(false);
+    });
+
+    it('names the connector that will open the connection, and reads blank as "any"', () => {
+      // Sites are separate networks: the connector on the router's LAN is the
+      // only one that can reach it, and the only one that can open the sealed
+      // password. A single-connector install leaves this empty.
+      expect(routerConnectionSchema.parse(base).connector_id).toBe('site-juba');
+      expect(routerConnectionSchema.parse({ ...base, connector_id: '' }).connector_id).toBeNull();
+      expect(routerConnectionSchema.safeParse({ ...base, connector_id: 'site juba!' }).success).toBe(false);
     });
 
     it('rejects addresses that are not a reachable IPv4 router', () => {

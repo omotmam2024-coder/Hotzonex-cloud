@@ -9,7 +9,7 @@ import { as, rpc } from '@hotzonex/db/testing';
 import { JobFailure } from '../src/jobs/context.js';
 import type { RegisteredJob } from '../src/jobs/runner.js';
 import { DEFAULT_REGISTRY } from '../src/jobs/runner.js';
-import { addRouter, createWorld, enqueue, fastForward, job, router, runJobs, sleep, type World } from './world.js';
+import { addConnector, addRouter, createWorld, enqueue, fastForward, job, router, runJobs, sleep, type World } from './world.js';
 
 let w: World;
 afterEach(async () => {
@@ -189,6 +189,49 @@ describe('discovery & sync', () => {
     expect(back.rows[0]?.removed_at).toBeNull();
     const still = await w.db.query<{ resolved_at: string | null }>(`select resolved_at from public.sync_drift where router_id = $1`, [r.id]);
     expect(still.rows[0]?.resolved_at).toBeNull();
+  });
+
+  it('a connector only takes work for routers it can reach', async () => {
+    // Two sites, two networks, two connectors — and the same address at both,
+    // because every MikroTik ships as 192.168.88.1.
+    w = await createWorld();
+    await addConnector(w, 'site-juba');
+    await addConnector(w, 'site-gorom');
+    const juba = await addRouter(w, { name: 'Juba Market', connectorId: 'site-juba', host: '192.168.88.1' });
+    const gorom = await addRouter(w, { name: 'Gorom', connectorId: 'site-gorom', host: '192.168.88.1' });
+    const unassigned = await addRouter(w, { name: 'Bench' });
+
+    const jubaJob = await enqueue(w, juba.id, 'router.sync');
+    const goromJob = await enqueue(w, gorom.id, 'router.sync');
+    const benchJob = await enqueue(w, unassigned.id, 'router.sync');
+
+    // Juba's connector must not touch Gorom's router, however loudly it asks.
+    const claimed = await w.store.claimJobs('site-juba', 50, 60);
+    const ids = claimed.map((j) => j.id);
+    expect(ids).toContain(jubaJob);
+    expect(ids).not.toContain(goromJob);
+    // A router assigned to nobody is still everyone's job, so a single-connector
+    // install keeps working exactly as before.
+    expect(ids).toContain(benchJob);
+
+    // Gorom's own connector picks up what was left for it.
+    const other = await w.store.claimJobs('site-gorom', 50, 60);
+    expect(other.map((j) => j.id)).toEqual([goromJob]);
+  });
+
+  it('a connector only polls the routers it is responsible for', async () => {
+    w = await createWorld();
+    await addConnector(w, 'site-juba');
+    await addConnector(w, 'site-gorom');
+    const juba = await addRouter(w, { name: 'Juba Health', connectorId: 'site-juba' });
+    const gorom = await addRouter(w, { name: 'Gorom Health', connectorId: 'site-gorom' });
+    const unassigned = await addRouter(w, { name: 'Bench Health' });
+
+    const due = await w.store.routersDue(300, 500, 'site-juba');
+    const ids = due.map((r) => r.id);
+    expect(ids).toContain(juba.id);
+    expect(ids).toContain(unassigned.id);
+    expect(ids).not.toContain(gorom.id);
   });
 
   it('is idempotent: re-running an abandoned (claimed, never finished) sync does not duplicate anything', async () => {

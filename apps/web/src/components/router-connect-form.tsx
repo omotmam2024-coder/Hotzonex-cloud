@@ -27,6 +27,7 @@ export function RouterConnectForm({
   pending,
   defaults,
   lockName,
+  connectors,
 }: {
   id?: string;
   onSubmit: (values: RouterConnectionInput) => void;
@@ -35,6 +36,8 @@ export function RouterConnectForm({
   defaults?: Partial<RouterConnectionInput>;
   /** Reconnecting an existing router: its name is already set and renaming it here would be a surprise. */
   lockName?: boolean;
+  /** Connectors that have reported in. Only shown when there is a choice to make. */
+  connectors?: { id: string; online: boolean }[];
 }) {
   const form = useForm<FormValues, unknown, RouterConnectionInput>({
     resolver: zodResolver(routerConnectionSchema),
@@ -47,6 +50,7 @@ export function RouterConnectForm({
       username: defaults?.username ?? 'admin',
       password: '',
       notes: defaults?.notes ?? '',
+      connector_id: defaults?.connector_id ?? connectors?.[0]?.id ?? '',
     },
   });
   const { errors } = form.formState;
@@ -98,6 +102,27 @@ export function RouterConnectForm({
           </Button>
         </div>
       </Field>
+
+      {connectors && connectors.length > 1 ? (
+        <Field
+          label="Site connector"
+          htmlFor="connector_id"
+          error={errors.connector_id?.message}
+          hint="The connector on this router’s network. It opens the connection and is the only one that can read the password."
+          required
+        >
+          <Select {...fieldA11y('connector_id', errors.connector_id?.message)} {...form.register('connector_id')}>
+            {connectors.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.id}
+                {c.online ? '' : ' (offline)'}
+              </option>
+            ))}
+          </Select>
+        </Field>
+      ) : (
+        <input type="hidden" {...form.register('connector_id')} />
+      )}
 
       {lockName ? (
         <input type="hidden" {...form.register('name')} />

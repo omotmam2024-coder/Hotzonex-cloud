@@ -53,6 +53,7 @@ export class ConnectorService {
       store: d.store,
       access: d.access,
       log: d.log.child({ component: 'health' }),
+      connectorId: d.connectorId,
       defaultIntervalSeconds: d.healthPollSeconds,
       tickSeconds: pollTick,
       concurrency: Math.max(2, d.jobConcurrency),

@@ -152,8 +152,16 @@ the browser could not reach a router even on the same Wi-Fi.
 | `host` | The LAN address, e.g. `192.168.88.1` | The router's own tunnel address, `10.77.x.y` |
 | Needs | **A connector on that same network** | The router to dial out over WireGuard |
 
-`routerMode()` tells them apart by address: a router reached at its own
-`wg_address` came through the script. The database keeps that honest —
+**Many sites, many connectors.** A router names the connector responsible for it
+in `routers.connector_id`; `connector_claim_jobs` and `connector_routers_due`
+only return work for that connector, plus routers assigned to none. This is what
+lets one Supabase project serve many separate LANs where the addresses collide —
+every MikroTik ships as `192.168.88.1` — and it is also a correctness
+requirement, because each connector seals credentials to a key derived from its
+own `ENCRYPTION_KEY`: a password sealed to one cannot be opened by another.
+
+`routerMode()` tells the two onboarding paths apart by address: a router reached
+at its own `wg_address` came through the script. The database keeps that honest —
 `routers_host_is_private` restricts `host` to RFC1918 (so the connector can
 never be aimed at the public internet, its own loopback, or link-local
 metadata), and `routers_host_not_another_tunnel` stops one router being pointed

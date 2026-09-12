@@ -762,6 +762,7 @@ export type Database = {
           created_by: string | null
           created_at: string
           updated_at: string
+          connector_id: string | null
         }
         Insert: {
           id?: string
@@ -799,6 +800,7 @@ export type Database = {
           created_by?: string | null
           created_at?: string
           updated_at?: string
+          connector_id?: string | null
         }
         Update: {
           id?: string
@@ -836,8 +838,16 @@ export type Database = {
           created_by?: string | null
           created_at?: string
           updated_at?: string
+          connector_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "routers_connector_id_fkey"
+            columns: ["connector_id"]
+            isOneToOne: false
+            referencedRelation: "connector_status"
+            referencedColumns: ["connector_id"]
+          },
           {
             foreignKeyName: "routers_created_by_fkey"
             columns: ["created_by"]
@@ -1173,6 +1183,7 @@ export type Database = {
         Args: {
           p_default_interval_seconds: number
           p_limit: number
+          p_connector_id?: string
         }
         Returns: {
           id: string

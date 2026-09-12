@@ -112,7 +112,7 @@ export async function createWorld(
     random: () => 0.5,
     ...(opts.registry ? { registry: opts.registry } : {}),
   });
-  const poller = new HealthPoller({ store, access, log, defaultIntervalSeconds: 300, tickSeconds: 15, concurrency: 2 });
+  const poller = new HealthPoller({ store, access, log, connectorId: 'test-connector', defaultIntervalSeconds: 300, tickSeconds: 15, concurrency: 2 });
 
   const world: World = {
     db, store, keyring, sealing, access, runner, poller, logs, log, tenantId, admin, locationId, providers, behaviors, hostToRouter, mockOptions,
@@ -127,14 +127,23 @@ export async function createWorld(
 /** Insert a router as the admin would (through RLS), then give it real encrypted credentials. */
 export async function addRouter(
   w: World,
-  opts: { name?: string; password?: string; withCredentials?: boolean; protocol?: 'api' | 'rest' } = {},
+  opts: { name?: string; password?: string; withCredentials?: boolean; protocol?: 'api' | 'rest'; connectorId?: string; host?: string } = {},
 ): Promise<{ id: string; host: string; password: string }> {
   const password = opts.password ?? 'Zx9KqT3mWp7Rb2NvLs8HdY4cFg6JtE5a';
   const r = await as(w.db, { kind: 'user', id: w.admin.id }, (tx) =>
     tx.query<{ id: string; host: string }>(
-      `insert into public.routers (tenant_id, location_id, name, api_protocol, api_port, use_ssl)
-       values ($1, $2, $3, $4, $5, $6) returning id, host`,
-      [w.tenantId, w.locationId, opts.name ?? `r-${randomUUID().slice(0, 6)}`, opts.protocol ?? 'api', opts.protocol === 'rest' ? 443 : 8728, opts.protocol === 'rest'],
+      `insert into public.routers (tenant_id, location_id, name, api_protocol, api_port, use_ssl, connector_id, host)
+       values ($1, $2, $3, $4, $5, $6, $7, coalesce($8, '')) returning id, host`,
+      [
+        w.tenantId,
+        w.locationId,
+        opts.name ?? `r-${randomUUID().slice(0, 6)}`,
+        opts.protocol ?? 'api',
+        opts.protocol === 'rest' ? 443 : 8728,
+        opts.protocol === 'rest',
+        opts.connectorId ?? null,
+        opts.host ?? null,
+      ],
     ),
   );
   const row = r.rows[0]!;
@@ -148,6 +157,17 @@ export async function addRouter(
     await w.db.query(`update public.routers set credentials_status = 'set' where id = $1`, [row.id]);
   }
   return { id: row.id, host: row.host, password };
+}
+
+/** Registers a connector, as its first heartbeat would. Routers reference one by id. */
+export async function addConnector(w: World, connectorId: string): Promise<string> {
+  await w.db.query(
+    `insert into public.connector_status (connector_id, provider_mode, sealing_key_id, sealing_public_key, started_at, last_heartbeat_at)
+     values ($1, 'mock', repeat('a', 16), '{"kty":"EC","crv":"P-256","x":"x","y":"y"}'::jsonb, now(), now())
+     on conflict (connector_id) do nothing`,
+    [connectorId],
+  );
+  return connectorId;
 }
 
 export async function enqueue(w: World, routerId: string, type: string, payload: Record<string, unknown> = {}, key = randomUUID()): Promise<string> {

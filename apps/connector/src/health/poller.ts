@@ -8,6 +8,8 @@ export interface HealthPollerOptions {
   store: ConnectorStore;
   access: RouterAccess;
   log: Logger;
+  /** Identifies this connector, so it polls only the routers it can reach. */
+  connectorId: string;
   /** Default interval; tenants may override with the health_poll_interval_seconds setting. */
   defaultIntervalSeconds: number;
   /** How often the poller wakes up to look for due routers. */
@@ -35,7 +37,7 @@ export class HealthPoller {
 
   /** Poll one batch of due routers. Returns how many were polled. */
   async tick(): Promise<number> {
-    const due = await this.o.store.routersDue(this.o.defaultIntervalSeconds, 500);
+    const due = await this.o.store.routersDue(this.o.defaultIntervalSeconds, 500, this.o.connectorId);
     if (due.length === 0) return 0;
     const neverPolled = due.filter((r) => r.last_polled_at === null);
     const backlog = due.filter((r) => r.last_polled_at !== null);
