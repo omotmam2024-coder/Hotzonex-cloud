@@ -23,6 +23,9 @@ export function RouterForm({
   onSubmit,
   error,
   pending,
+  id,
+  hideSubmit,
+  advancedCollapsed,
 }: {
   defaults?: Partial<RouterInput>;
   locations?: Pick<LocationRow, 'id' | 'name'>[];
@@ -31,6 +34,11 @@ export function RouterForm({
   onSubmit: (values: RouterInput) => void;
   error?: unknown;
   pending?: boolean;
+  /** Lets a submit button live outside the form, via `form="…"`. */
+  id?: string;
+  hideSubmit?: boolean;
+  /** Onboarding asks for a name and nothing else; the defaults are right for almost every router. */
+  advancedCollapsed?: boolean;
 }) {
   const form = useForm<FormValues, unknown, RouterInput>({
     resolver: zodResolver(routerSchema),
@@ -54,26 +62,8 @@ export function RouterForm({
     form.setValue('api_port', defaultPortFor(next, ssl));
   };
 
-  return (
-    <form className="grid gap-4" noValidate onSubmit={form.handleSubmit(onSubmit)}>
-      <Field label="Router name" htmlFor="name" error={errors.name?.message} hint="How your team refers to this site, e.g. “Lologo Gate”." required>
-        <Input autoComplete="off" {...fieldA11y('name', errors.name?.message)} {...form.register('name')} />
-      </Field>
-      {showLocation ? (
-        <Field label="Location" htmlFor="location_id" error={errors.location_id?.message}>
-          <Select
-            {...fieldA11y('location_id', errors.location_id?.message)}
-            {...form.register('location_id', { setValueAs: (v: string) => (v === '' ? null : v) })}
-          >
-            <option value="">Unassigned</option>
-            {(locations ?? []).map((l) => (
-              <option key={l.id} value={l.id}>
-                {l.name}
-              </option>
-            ))}
-          </Select>
-        </Field>
-      ) : null}
+  const connection = (
+    <>
       <div className="grid gap-4 sm:grid-cols-[1fr_8rem]">
         <Field label="API protocol" htmlFor="api_protocol" hint={PROTOCOL_HINT[protocol]}>
           <Select id="api_protocol" value={protocol} onChange={(e) => onProtocolChange(e.target.value as RouterInput['api_protocol'])}>
@@ -103,12 +93,48 @@ export function RouterForm({
       <Field label="Notes" htmlFor="notes" error={errors.notes?.message}>
         <Textarea rows={2} {...fieldA11y('notes', errors.notes?.message)} {...form.register('notes')} />
       </Field>
+    </>
+  );
+
+  return (
+    <form id={id} className="grid gap-4" noValidate onSubmit={form.handleSubmit(onSubmit)}>
+      <Field label="Router name" htmlFor="name" error={errors.name?.message} hint="How your team refers to this site, e.g. “Lologo Gate”." required>
+        <Input autoComplete="off" {...fieldA11y('name', errors.name?.message)} {...form.register('name')} />
+      </Field>
+      {showLocation ? (
+        <Field label="Location" htmlFor="location_id" error={errors.location_id?.message}>
+          <Select
+            {...fieldA11y('location_id', errors.location_id?.message)}
+            {...form.register('location_id', { setValueAs: (v: string) => (v === '' ? null : v) })}
+          >
+            <option value="">Unassigned</option>
+            {(locations ?? []).map((l) => (
+              <option key={l.id} value={l.id}>
+                {l.name}
+              </option>
+            ))}
+          </Select>
+        </Field>
+      ) : null}
+      {advancedCollapsed ? (
+        <details className="rounded-lg border bg-card px-3 py-2 [&[open]>summary]:mb-3">
+          <summary className="cursor-pointer text-sm font-medium">Connection settings</summary>
+          <div className="grid gap-4 pb-1">
+            <p className="text-xs text-muted-foreground">The defaults suit almost every router. Change them only if this one is set up differently.</p>
+            {connection}
+          </div>
+        </details>
+      ) : (
+        connection
+      )}
       <InlineError error={error} />
-      <div className="flex justify-end">
-        <Button type="submit" loading={pending}>
-          {submitLabel}
-        </Button>
-      </div>
+      {hideSubmit ? null : (
+        <div className="flex justify-end">
+          <Button type="submit" loading={pending}>
+            {submitLabel}
+          </Button>
+        </div>
+      )}
     </form>
   );
 }

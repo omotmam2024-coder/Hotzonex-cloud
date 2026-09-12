@@ -5,7 +5,7 @@ import { toAppError } from '@/lib/errors';
 import { readEnv } from '@/lib/env';
 import { describeConnector } from '@/lib/queries/misc';
 import { PERSISTED_QUERY_ROOTS, shouldPersist } from '@/lib/query-client';
-import { resumeStep } from '@/lib/wizard';
+import { previousStep, resumeStep } from '@/lib/wizard';
 import { countRouters } from '@/pages/dashboard';
 
 describe('dashboard counts', () => {
@@ -71,9 +71,11 @@ describe('wizard resume', () => {
   } as const;
   it.each([
     [{}, 'finish'],
-    [{ credentials_status: 'not_set' }, 'connect'],
-    [{ credentials_status: 'rejected' }, 'connect'],
-    [{ wg_public_key: null }, 'connect'],
+    // No credentials, or no tunnel key, both send the technician back to the
+    // script: it is the script that sets the password and prints the key.
+    [{ credentials_status: 'not_set' }, 'script'],
+    [{ credentials_status: 'rejected' }, 'script'],
+    [{ wg_public_key: null }, 'script'],
     [{ last_seen_at: null }, 'test'],
     [{ discovered_at: null }, 'discover'],
     [{ hotspot_server_id: null }, 'hotspot'],
@@ -82,6 +84,19 @@ describe('wizard resume', () => {
     expect(resumeStep({ ...base, ...patch } as never)).toBe(step);
   });
   it('starts at details without a router', () => expect(resumeStep(null)).toBe('details'));
+
+  it('never resumes into a step that only explains the hardware', () => {
+    const explainOnly = ['prepare', 'credentials', 'key'];
+    for (const patch of [{}, { credentials_status: 'not_set' }, { wg_public_key: null }, { last_seen_at: null }, { location_id: null }]) {
+      expect(explainOnly).not.toContain(resumeStep({ ...base, ...patch } as never));
+    }
+  });
+
+  it('steps back one screen, and leaves the wizard from the first', () => {
+    expect(previousStep('prepare')).toBe('details');
+    expect(previousStep('key')).toBe('script');
+    expect(previousStep('details')).toBeNull();
+  });
 });
 
 describe('user-facing errors', () => {

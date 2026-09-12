@@ -80,7 +80,7 @@ test('routers list and router detail tabs', async ({ page }) => {
 test('onboarding wizard shows the RouterOS script with the router’s own addresses', async ({ page }) => {
   await signIn(page);
   await page.goto('/routers/r-4/onboard');
-  await expect(page.getByText('1. Run this script on the router')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Run this script on the router' })).toBeVisible();
   const script = page.getByLabel('RouterOS setup script');
   await expect(script).toContainText('address=10.77.0.5/32 network=10.77.0.1');
   await expect(script).toContainText('endpoint-address=wg.hotzonex.com endpoint-port=51820');
@@ -94,6 +94,40 @@ test('onboarding wizard shows the RouterOS script with the router’s own addres
   expect(stored).not.toContain(password as string);
   await expectNoHorizontalScroll(page);
   await shot(page, 'wizard-connect');
+
+  // One task per screen: the script and the key that comes back are separate steps.
+  await page.getByRole('button', { name: 'I have run the script' }).click();
+  await expect(page.getByRole('heading', { name: 'Paste the line the router printed' })).toBeVisible();
+  await expect(page.getByLabel('Router output')).toBeVisible();
+  await expectNoHorizontalScroll(page);
+  await shot(page, 'wizard-key');
+});
+
+test('adding a router starts with a name and a picture of the cable', async ({ page }) => {
+  await signIn(page);
+  await page.goto('/routers/new');
+  await expect(page.getByRole('heading', { name: 'Name this router' })).toBeVisible();
+  // Connection settings are real but folded away: onboarding asks for a name and nothing else.
+  await expect(page.getByLabel('Router name')).toBeVisible();
+  await expect(page.getByLabel('API protocol')).toBeHidden();
+  const progress = page.getByRole('progressbar', { name: 'Onboarding progress' });
+  await expect(progress).toHaveAttribute('aria-valuenow', '1');
+  await expectNoHorizontalScroll(page);
+  await shot(page, 'wizard-details');
+
+  await page.getByLabel('Router name').fill('Juba Market Gate');
+  await page.getByRole('button', { name: 'Create and continue' }).click();
+
+  await expect(page.getByRole('heading', { name: 'Connect your router to the internet' })).toBeVisible();
+  await expect(page.locator('strong', { hasText: 'ether 1' })).toBeVisible();
+  await expect(page.getByText(/hear a click/i)).toBeVisible();
+  await expectNoHorizontalScroll(page);
+  await shot(page, 'wizard-prepare');
+
+  await page.getByRole('button', { name: 'Next' }).click();
+  await expect(page.getByRole('heading', { name: 'Get your router’s username and password' })).toBeVisible();
+  await expectNoHorizontalScroll(page);
+  await shot(page, 'wizard-credentials');
 });
 
 test('locations, audit and settings render', async ({ page }) => {
@@ -124,4 +158,9 @@ test('dark mode is selectable and applied', async ({ page }) => {
   await page.getByRole('menuitem', { name: 'Dark' }).click();
   await expect(page.locator('html')).toHaveClass(/dark/);
   await shot(page, 'dashboard-dark');
+
+  // The wizard illustrations are drawn with theme variables, so they must follow.
+  await page.goto('/routers/r-4/onboard');
+  await expect(page.getByRole('heading', { name: 'Run this script on the router' })).toBeVisible();
+  await shot(page, 'wizard-dark');
 });
