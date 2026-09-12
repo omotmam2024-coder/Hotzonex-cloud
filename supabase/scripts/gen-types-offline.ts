@@ -7,7 +7,7 @@
  */
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { createTestDb, SUPABASE_DIR } from '../tests/harness.js';
+import { createTestDb, SUPABASE_DIR } from './tests/harness.js';
 
 const OUT = join(SUPABASE_DIR, '..', 'packages', 'shared', 'src', 'database.types.ts');
 

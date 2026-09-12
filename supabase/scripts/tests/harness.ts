@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { PGlite, type Transaction } from '@electric-sql/pglite';
 
 const here = dirname(fileURLToPath(import.meta.url));
-export const SUPABASE_DIR = join(here, '..');
+export const SUPABASE_DIR = join(here, '..', '..');
 export const MIGRATIONS_DIR = join(SUPABASE_DIR, 'migrations');
 
 export function migrationFiles(): string[] {
