@@ -22,8 +22,12 @@ import { toAppError, userMessage } from '@/lib/errors';
 import {
   useConnector,
   useCreateInvite,
+  useGrantAccess,
   useInvites,
+  usePendingAccounts,
+  useRemovePendingAccount,
   useRevokeInvite,
+  type PendingAccount,
   useSaveOrganization,
   useSaveSetting,
   useSettings,
@@ -176,8 +180,92 @@ function MemberRow({ member }: { member: ProfileRow }) {
   );
 }
 
+type GrantableRole = 'SUPER_ADMIN' | 'ADMIN' | 'TECHNICIAN';
+
+function PendingAccountRow({ account }: { account: PendingAccount }) {
+  const grant = useGrantAccess();
+  const remove = useRemovePendingAccount();
+  const [role, setRole] = useState<GrantableRole>('TECHNICIAN');
+  const [confirmRemove, setConfirmRemove] = useState(false);
+  return (
+    <TR>
+      <TD>
+        <div className="font-medium">{account.email}</div>
+        <div className="text-xs text-muted-foreground">
+          Created <RelativeTime value={account.created_at} />
+          {account.email_confirmed ? '' : ' · email not confirmed'}
+        </div>
+      </TD>
+      <TD>
+        <Select aria-label={`Role for ${account.email}`} className="w-auto" value={role} onChange={(e) => setRole(e.target.value as GrantableRole)}>
+          <option value="TECHNICIAN">Technician</option>
+          <option value="ADMIN">Admin</option>
+          <option value="SUPER_ADMIN">Super admin</option>
+        </Select>
+      </TD>
+      <TD className="text-right">
+        <div className="flex justify-end gap-2">
+          <Button
+            size="sm"
+            loading={grant.isPending}
+            onClick={() =>
+              grant.mutate(
+                { userId: account.user_id, role },
+                { onSuccess: () => toast.success(`${account.email} can now sign in as ${ROLE_LABELS[role]}`), onError: (e) => toast.error(userMessage(e)) },
+              )
+            }
+          >
+            Grant access
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => setConfirmRemove(true)}>Remove</Button>
+        </div>
+        <ConfirmDialog
+          open={confirmRemove}
+          onOpenChange={setConfirmRemove}
+          title={`Remove ${account.email}?`}
+          description="Deletes this sign-in account. It never had access to any data. The removal is recorded in the audit log."
+          confirmLabel="Remove account"
+          destructive
+          pending={remove.isPending}
+          onConfirm={() => remove.mutate(account.user_id, { onSuccess: () => setConfirmRemove(false), onError: (e) => toast.error(userMessage(e)) })}
+        />
+      </TD>
+    </TR>
+  );
+}
+
+/** SUPER_ADMIN only: accounts created in Supabase (dashboard "Add user") that have no role yet. */
+function PendingAccountsCard() {
+  const pending = usePendingAccounts(true);
+  return (
+    <Card>
+      <CardHeader>
+        <div>
+          <CardTitle>Waiting for access</CardTitle>
+          <CardDescription>
+            Accounts created in the Supabase dashboard (Authentication → Add user) or signed up without an invitation.
+            They cannot see anything until you grant a role.
+          </CardDescription>
+        </div>
+      </CardHeader>
+      {pending.isPending ? (
+        <TableSkeleton rows={2} cols={3} />
+      ) : pending.isError ? (
+        <div className="p-4"><ErrorState error={pending.error} onRetry={() => void pending.refetch()} /></div>
+      ) : pending.data.length === 0 ? (
+        <EmptyState title="No accounts waiting" description="When someone is added in the Supabase dashboard, they appear here so you can choose their role." />
+      ) : (
+        <Table>
+          <THead><TR className="hover:bg-transparent"><TH>Account</TH><TH>Role to grant</TH><TH className="text-right"><span className="sr-only">Actions</span></TH></TR></THead>
+          <TBody>{pending.data.map((a) => <PendingAccountRow key={a.user_id} account={a} />)}</TBody>
+        </Table>
+      )}
+    </Card>
+  );
+}
+
 function TeamCard() {
-  const { can } = useAuth();
+  const { can, role: myRole } = useAuth();
   const team = useTeam();
   const invites = useInvites(can.manageTeam);
   const create = useCreateInvite();
@@ -193,7 +281,7 @@ function TeamCard() {
           <CardHeader>
             <div>
               <CardTitle>Invite a team member</CardTitle>
-              <CardDescription>Hotzonex Cloud is invite-only. Share the one-time link with the person directly (WhatsApp, SMS or email).</CardDescription>
+              <CardDescription>Share the one-time link with the person directly (WhatsApp, SMS or email). They get access as soon as they sign up with it.</CardDescription>
             </div>
           </CardHeader>
           <CardContent className="grid gap-3">
@@ -231,6 +319,8 @@ function TeamCard() {
           </CardContent>
         </Card>
       ) : null}
+
+      {myRole === 'SUPER_ADMIN' ? <PendingAccountsCard /> : null}
 
       <Card>
         <CardHeader><CardTitle>Team</CardTitle></CardHeader>

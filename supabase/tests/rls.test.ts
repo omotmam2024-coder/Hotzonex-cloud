@@ -297,8 +297,9 @@ describe('function privileges', () => {
     const authed = rows.rows.filter((r) => r.authed).map((r) => r.name);
     expect(anon).toEqual(['get_invite']);
     expect(authed).toEqual([
-      'create_invite', 'enqueue_router_job', 'get_invite', 'record_auth_event', 'resolve_drift', 'revoke_invite',
-      'router_uptime_buckets', 'submit_router_credentials', 'update_member',
+      'create_invite', 'enqueue_router_job', 'get_invite', 'grant_access', 'list_pending_accounts', 'record_auth_event',
+      'remove_pending_account', 'resolve_drift', 'revoke_invite', 'router_uptime_buckets', 'submit_router_credentials',
+      'update_member',
     ]);
   });
 });
@@ -336,8 +337,20 @@ describe('invite-only sign-up', () => {
     expect(after[0]?.state).toBe('not_found');
   });
 
-  it('rejects sign-up without a token, with a wrong email, or with a revoked invite', async () => {
-    await expect(signUp('nobody@x.test', {})).rejects.toThrow(/invite-only/);
+  it('an account without an invite is created with no profile and sees nothing', async () => {
+    const id = await signUp('nobody@x.test', {});
+    expect((await db.query(`select 1 from public.profiles where id = $1`, [id])).rows).toHaveLength(0);
+    for (const table of ['routers', 'locations', 'jobs', 'audit_logs', 'profiles', 'tenants']) {
+      expect(await attempt(user({ id, email: 'nobody@x.test', role: 'TECHNICIAN', tenantId: tenantA }), (tx) => tx.query(`select * from public.${table}`)), table).toBe(0);
+    }
+    const r = await attempt(user({ id, email: 'nobody@x.test', role: 'TECHNICIAN', tenantId: tenantA }), (tx) =>
+      rpc(tx, 'enqueue_router_job', { p_router_id: routerA.id, p_type: 'router.sync', p_idempotency_key: 'pending-user-1' }).then((rows) => ({ rows })),
+    ).catch((e: unknown) => e);
+    expect(r).toBeInstanceOf(Error);
+  });
+
+  it('still rejects a malformed, wrong-email, or revoked invite token', async () => {
+    await expect(signUp('bad-token@x.test', { invite_token: 'not-a-token' })).rejects.toThrow(/invalid, expired/);
     const [inv] = await as(db, user(adminA), (tx) => rpc<{ invite_id: string; token: string }>(tx, 'create_invite', { p_email: 'right@a.test', p_role: 'ADMIN' }));
     await expect(signUp('wrong@a.test', { invite_token: inv!.token })).rejects.toThrow(/different email/);
     await as(db, user(adminA), (tx) => rpc(tx, 'revoke_invite', { p_invite_id: inv!.invite_id }));
@@ -356,19 +369,68 @@ describe('invite-only sign-up', () => {
     // The seed script creates the profile itself; the trigger must not.
     expect((await db.query(`select 1 from public.profiles where id = $1`, [id])).rows).toHaveLength(0);
 
-    // Without the marker the same two-step write is still rejected, and nothing is left behind.
-    await expect(
-      db.transaction(async (tx) => {
-        await tx.query(`insert into auth.users (email) values ('sneaky@hq.test')`);
-        await tx.query(`update auth.users set raw_app_meta_data = '{"provider":"email"}' where email = 'sneaky@hq.test'`);
-      }),
-    ).rejects.toThrow(/invite-only/);
-    expect((await db.query(`select 1 from auth.users where email = 'sneaky@hq.test'`)).rows).toHaveLength(0);
+    // A dashboard "Add user" (no marker, no invite) is accepted but waits for approval: no profile.
+    await db.transaction(async (tx) => {
+      await tx.query(`insert into auth.users (email) values ('dashboard@hq.test')`);
+      await tx.query(`update auth.users set raw_app_meta_data = '{"provider":"email"}' where email = 'dashboard@hq.test'`);
+    });
+    const dash = await db.query<{ id: string }>(`select id from auth.users where email = 'dashboard@hq.test'`);
+    expect(dash.rows).toHaveLength(1);
+    expect((await db.query(`select 1 from public.profiles where id = $1`, [dash.rows[0]!.id])).rows).toHaveLength(0);
   });
 
   it('technicians cannot invite; invites can only grant ADMIN or TECHNICIAN', async () => {
     await expect(as(db, user(techA), (tx) => rpc(tx, 'create_invite', { p_email: 'x@a.test', p_role: 'TECHNICIAN' }))).rejects.toThrow(/Only an administrator/);
     await expect(as(db, user(adminA), (tx) => rpc(tx, 'create_invite', { p_email: 'x@a.test', p_role: 'SUPER_ADMIN' }))).rejects.toThrow(/Admin or Technician/);
+  });
+});
+
+describe('accounts waiting for access', () => {
+  async function pendingUser(email: string): Promise<string> {
+    const r = await db.query<{ id: string }>(`insert into auth.users (email) values ($1) returning id`, [email]);
+    return r.rows[0]!.id;
+  }
+
+  it('only a SUPER_ADMIN can list them', async () => {
+    const id = await pendingUser('waiting@x.test');
+    const rows = await as(db, user(superAdmin), (tx) => rpc<{ user_id: string; email: string }>(tx, 'list_pending_accounts'));
+    expect(rows.some((r) => r.user_id === id && r.email === 'waiting@x.test')).toBe(true);
+    expect(rows.some((r) => r.email === 'admin@a.test')).toBe(false); // accounts with a profile are not "waiting"
+    for (const u of [adminA, techA]) {
+      await expect(as(db, user(u), (tx) => rpc(tx, 'list_pending_accounts'))).rejects.toThrow(/super administrator/);
+    }
+    await expect(as(db, { kind: 'anon' }, (tx) => rpc(tx, 'list_pending_accounts'))).rejects.toThrow();
+  });
+
+  it('granting access creates the profile in the granter\'s tenant, audited, and the user can then work', async () => {
+    const id = await pendingUser('Granted@X.test');
+    const newcomer: UserFixture = { id, email: 'granted@x.test', role: 'TECHNICIAN', tenantId: tenantA };
+    expect(await attempt(user(newcomer), (tx) => tx.query(`select * from public.routers`))).toBe(0);
+
+    await expect(as(db, user(adminA), (tx) => rpc(tx, 'grant_access', { p_user_id: id, p_role: 'TECHNICIAN' }))).rejects.toThrow(/super administrator/);
+    await expect(as(db, user(superAdmin), (tx) => rpc(tx, 'grant_access', { p_user_id: id, p_role: 'CUSTOMER' }))).rejects.toThrow(/not available yet/);
+
+    const [profile] = await as(db, user(superAdmin), (tx) =>
+      rpc<{ tenant_id: string; role: string; email: string }>(tx, 'grant_access', { p_user_id: id, p_role: 'TECHNICIAN', p_full_name: 'New Tech' }),
+    );
+    expect(profile).toMatchObject({ tenant_id: tenantA, role: 'TECHNICIAN', email: 'granted@x.test' });
+    expect(await attempt(user(newcomer), (tx) => tx.query(`select * from public.routers where tenant_id = $1`, [tenantA]))).toBeGreaterThan(0);
+    expect(await attempt(user(newcomer), (tx) => tx.query(`select * from public.routers where tenant_id = $1`, [tenantB]))).toBe(0);
+
+    const log = await db.query<{ actor_email: string; after: { role: string } }>(
+      `select actor_email, after from public.audit_logs where action = 'team.member.access_granted' and entity_id = $1`, [id]);
+    expect(log.rows[0]).toMatchObject({ actor_email: 'root@hq.test', after: { role: 'TECHNICIAN' } });
+
+    await expect(as(db, user(superAdmin), (tx) => rpc(tx, 'grant_access', { p_user_id: id, p_role: 'ADMIN' }))).rejects.toThrow(/already has access/);
+  });
+
+  it('a SUPER_ADMIN can remove a waiting account, but never one that has access', async () => {
+    const id = await pendingUser('spam@x.test');
+    await expect(as(db, user(adminA), (tx) => rpc(tx, 'remove_pending_account', { p_user_id: id }))).rejects.toThrow(/super administrator/);
+    await as(db, user(superAdmin), (tx) => rpc(tx, 'remove_pending_account', { p_user_id: id }));
+    expect((await db.query(`select 1 from auth.users where id = $1`, [id])).rows).toHaveLength(0);
+    await expect(as(db, user(superAdmin), (tx) => rpc(tx, 'remove_pending_account', { p_user_id: techA.id }))).rejects.toThrow(/suspend it/);
+    expect((await db.query(`select 1 from auth.users where id = $1`, [techA.id])).rows).toHaveLength(1);
   });
 });
 

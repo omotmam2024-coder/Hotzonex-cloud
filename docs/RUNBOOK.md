@@ -75,9 +75,12 @@ A free MikroTik **CHR** VM works for this.
 
 1. Create a project (region closest to the VPS; latency to Juba matters less than
    VPS↔Supabase latency, since the connector does most of the traffic).
-2. Auth → Sign-ups: keep enabled (sign-up is invite-only in the database).
-   Set the **Site URL** to the Vercel domain. Keep email confirmation on.
-   Auth → Rate limits: keep defaults or tighten.
+2. Auth → Sign-ups: keep enabled (the database rejects sign-up without a
+   valid invite token). Set the **Site URL** to the Vercel domain. Keep email
+   confirmation on. Auth → Rate limits: keep defaults or tighten.
+   Accounts added directly in Auth → Users (or via the Admin API) get no
+   profile and see "No access yet" until a SUPER_ADMIN grants a role from
+   Settings → Team → Waiting for access.
 3. Apply migrations: set `SUPABASE_DB_URL` in `supabase/.env` to the project's
    connection string, then `pnpm db:migrate` (it runs `supabase db push`).
 4. Seed: set `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SEED_ADMIN_PASSWORD` and

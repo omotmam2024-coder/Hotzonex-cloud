@@ -16,5 +16,6 @@ export const qk = {
   settings: () => ['settings'] as const,
   team: () => ['team'] as const,
   invites: () => ['invites'] as const,
+  pendingAccounts: () => ['pending-accounts'] as const,
   jobTypes: () => ['job_types'] as const,
 };

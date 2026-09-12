@@ -19,7 +19,8 @@
                 │ HTTPS (PostgREST, Auth) + WSS (Realtime)  — RLS decides everything
 ┌───────────────▼──────────────── Data plane: Supabase ───────────────────────────┐
 │ Postgres: all business records, RLS on every table, audit via triggers,         │
-│ job queue, connector RPCs (service role only). Auth: identity, invite-only.     │
+│ job queue, connector RPCs (service role only). Auth: identity, invite or        │
+│ super-admin approval required.                                                  │
 │ Realtime: live router status / job progress to the UI.                           │
 └───────────────▲─────────────────────────────────────────────────────────────────┘
                 │ supabase.rpc() with the SERVICE-ROLE key (server-side only)
@@ -66,6 +67,9 @@ session, WireGuard needs a long-lived interface, and polling needs a scheduler.
 | `…400_audit` | immutable audit log, row-change triggers, login/logout from `auth.sessions` |
 | `…500_connector` | connector status, service-role RPCs: claim/start/finish jobs, health poll, non-destructive sync + drift, credentials, WireGuard, retention |
 | `…600_realtime` | publication for routers, jobs, drift, connector status |
+| `…700_envelope_fix_auth_audit_fallback` | error envelope fix, auth audit fallback when `auth.sessions` triggers can't fire |
+| `…800_signup_trigger_deferred` | sign-up trigger deferred to commit, so Auth's two-step admin `createUser()` write is seen whole |
+| `…201942_pending_accounts` | accounts created outside the invite flow (Supabase dashboard, Auth Admin API) wait for a SUPER_ADMIN to grant a role instead of being rejected |
 
 **Tenancy.** Every business table has `tenant_id`; child tables reference
 `(router_id, tenant_id)` with composite foreign keys so a row can never point
@@ -153,11 +157,13 @@ Drift is never auto-resolved; a technician acknowledges it.
 
 - RLS on every table, explicit per-role policies; tests run with Supabase's
   permissive default grants so RLS and explicit revokes are what is being proven.
-- Only `get_invite` is callable by `anon`; eight functions by `authenticated`
+- Only `get_invite` is callable by `anon`; eleven functions by `authenticated`
   (allow-list test). All `connector_*` functions are service-role only.
 - Audit log: written by triggers/SECURITY DEFINER only; UPDATE/DELETE/TRUNCATE
   rejected by trigger for every role including the service role.
-- Sign-up is invite-only, enforced in a trigger on `auth.users`.
+- Sign-up needs a valid invite token, enforced in a deferred trigger on
+  `auth.users`. An account created without one (Supabase dashboard, Auth
+  Admin API) gets no profile and no access until a SUPER_ADMIN grants a role.
 - Web: strict CSP (no inline script), session in Secure SameSite=Strict cookies.
 - Connector: redacting structured logger, config errors never echo values,
   WireGuard commands via `execFile` with validated arguments.

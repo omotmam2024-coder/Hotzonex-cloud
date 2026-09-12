@@ -1314,9 +1314,42 @@ export type Database = {
           state: string
         }[]
       }
+      grant_access: {
+        Args: {
+          p_user_id: string
+          p_role: Database["public"]["Enums"]["app_role"]
+          p_full_name?: string
+        }
+        Returns: {
+          id: string
+          tenant_id: string
+          email: string
+          full_name: string
+          role: Database["public"]["Enums"]["app_role"]
+          status: Database["public"]["Enums"]["profile_status"]
+          created_at: string
+          updated_at: string
+        }
+      }
+      list_pending_accounts: {
+        Args: never
+        Returns: {
+          user_id: string
+          email: string
+          created_at: string
+          last_sign_in_at: string
+          email_confirmed: boolean
+        }[]
+      }
       record_auth_event: {
         Args: {
           p_event: string
+        }
+        Returns: undefined
+      }
+      remove_pending_account: {
+        Args: {
+          p_user_id: string
         }
         Returns: undefined
       }

@@ -250,6 +250,47 @@ export function useUpdateMember() {
   });
 }
 
+export interface PendingAccount {
+  user_id: string;
+  email: string;
+  created_at: string;
+  last_sign_in_at: string | null;
+  email_confirmed: boolean;
+}
+
+/** Accounts created in Supabase without an invite, waiting for a SUPER_ADMIN to grant access. */
+export function usePendingAccounts(enabled: boolean) {
+  return useQuery({
+    queryKey: qk.pendingAccounts(),
+    enabled,
+    queryFn: async () => unwrap(await getSupabase().rpc('list_pending_accounts')) as PendingAccount[],
+  });
+}
+
+export function useGrantAccess() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ userId, role }: { userId: string; role: 'SUPER_ADMIN' | 'ADMIN' | 'TECHNICIAN' }) => {
+      unwrap(await getSupabase().rpc('grant_access', { p_user_id: userId, p_role: role }));
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: qk.pendingAccounts() });
+      void qc.invalidateQueries({ queryKey: qk.team() });
+    },
+  });
+}
+
+export function useRemovePendingAccount() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (userId: string) => {
+      const { error } = await getSupabase().rpc('remove_pending_account', { p_user_id: userId });
+      if (error) throw toAppError(error);
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: qk.pendingAccounts() }),
+  });
+}
+
 export function useUpdateProfileName() {
   const qc = useQueryClient();
   return useMutation({

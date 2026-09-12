@@ -69,7 +69,9 @@ function RequireStaff() {
         description={
           suspended
             ? 'An administrator has suspended this account. Contact your Hotzonex administrator to restore access.'
-            : 'This account has no Hotzonex Cloud workspace, or its role has no admin access in this version. Contact your administrator.'
+            : auth.profile
+              ? 'Your role has no access to the admin console in this version. Contact your administrator.'
+              : 'Your account is waiting for access. A Hotzonex super admin can grant it in Settings → Team → Waiting for access.'
         }
         action={<Button variant="outline" onClick={() => void auth.signOut()}>Sign out</Button>}
       />
