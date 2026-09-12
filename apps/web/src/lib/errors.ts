@@ -60,6 +60,15 @@ export function toAppError(error: unknown): AppError {
   if (code === '23505') return new AppError('That name is already in use. Choose another.', 'validation');
   if (code === '23514' || code === '22023' || code === '22P02') return new AppError('Some of the values are not valid. Check the form and try again.', 'validation');
   if (code === 'PGRST116' || code === 'P0002' || status === 404) return new AppError(DB_HINT_MESSAGES['not_found'] as string, 'not_found');
+  // The app is newer than the database: a column, table or function it relies on
+  // is not there. Retrying never fixes this, so say what actually has to happen
+  // instead of blaming the server.
+  if (code === 'PGRST204' || code === 'PGRST202' || code === '42703' || code === '42883' || code === '42P01') {
+    return new AppError(
+      'This app is newer than its database — a pending update has not been applied yet. Ask an administrator to run the outstanding migrations.',
+      'unknown',
+    );
+  }
   return new AppError('Something went wrong on our side. Please try again in a moment.', 'unknown');
 }
 

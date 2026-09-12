@@ -155,6 +155,17 @@ describe('user-facing errors', () => {
     const unknown = toAppError(new Error('relation "public.secret" does not exist at character 15'));
     expect(unknown.userMessage).not.toMatch(/relation|character|secret/);
   });
+
+  it('says so when the app is ahead of its database, instead of blaming the server', () => {
+    // A deployed build calling a column or function a pending migration adds.
+    for (const code of ['PGRST204', 'PGRST202', '42703', '42883', '42P01']) {
+      const e = toAppError({ code, message: "Could not find the 'connector_id' column of 'routers' in the schema cache" });
+      expect(e.userMessage, code).toMatch(/pending update has not been applied/i);
+      expect(e.userMessage, code).not.toMatch(/connector_id|schema cache/);
+    }
+    // An error with no such cause still gets the neutral message.
+    expect(toAppError(new Error('boom')).userMessage).toMatch(/went wrong on our side/i);
+  });
 });
 
 describe('offline cache', () => {
