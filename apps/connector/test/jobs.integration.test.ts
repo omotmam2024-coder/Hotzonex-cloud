@@ -219,6 +219,66 @@ describe('discovery & sync', () => {
     expect(other.map((j) => j.id)).toEqual([goromJob]);
   });
 
+  it('enables remote access on a local router and hands it to the tunnel connector', async () => {
+    w = await createWorld();
+    await addConnector(w, 'site-juba');
+    // The VPS connector is the one that publishes an endpoint to dial.
+    await addConnector(w, 'vps');
+    await w.db.query(
+      `update public.connector_status
+          set wg_server_public_key = 'Zm9vYmFyZm9vYmFyZm9vYmFyZm9vYmFyZm9vYmFyZm8=',
+              wg_endpoint = 'wg.hotzonex.com:51820', wg_server_address = '10.77.0.1'
+        where connector_id = 'vps'`,
+    );
+    // The site connector is the one running these jobs: it is on the router's LAN.
+    await addConnector(w, 'test-connector');
+    const r = await addRouter(w, { name: 'Juba Market', connectorId: 'test-connector', host: '192.168.88.1' });
+    const before = await router(w, r.id);
+    expect(before).toMatchObject({ host: '192.168.88.1', wg_public_key: null, connector_id: 'test-connector' });
+
+    const id = await enqueue(w, r.id, 'router.enable_remote');
+    await runJobs(w);
+
+    const j = await job(w, id);
+    expect(j.last_error ?? j.status).toBe('succeeded');
+    const result = j.result as { publicKey: string; address: string; connectorId: string };
+    // A tunnel address was allocated when the router was created; this is where it starts being used.
+    expect(result.address).toBe(before['wg_address']);
+    expect(result.connectorId).toBe('vps');
+
+    const after = await router(w, r.id);
+    expect(after).toMatchObject({
+      host: before['wg_address'],
+      wg_public_key: result.publicKey,
+      // The site connector cannot reach a tunnel address; the VPS one takes over.
+      connector_id: 'vps',
+    });
+
+    // The hand-over is real: the site connector is on the LAN and cannot reach a
+    // tunnel address, so from now on it must not pick up work for this router.
+    const next = await enqueue(w, r.id, 'router.sync');
+    await runJobs(w);
+    expect((await job(w, next)).status).toBe('pending');
+    const claimedByTunnel = await w.store.claimJobs('vps', 10, 60);
+    expect(claimedByTunnel.map((c) => c.id)).toContain(next);
+  });
+
+  it('refuses to enable remote access when no connector publishes an endpoint', async () => {
+    w = await createWorld();
+    const r = await addRouter(w, { name: 'Nowhere', host: '192.168.88.1' });
+    const id = await enqueue(w, r.id, 'router.enable_remote');
+    // Recoverable by starting the VPS connector, so it retries before giving up.
+    for (let i = 0; i < 4; i++) {
+      await runJobs(w);
+      await fastForward(w, id);
+    }
+    const j = await job(w, id);
+    expect(j.status).toBe('dead');
+    expect(j.last_error).toMatch(/nothing to dial/i);
+    // The router keeps its local address rather than being stranded on a tunnel that does not exist.
+    expect(await router(w, r.id)).toMatchObject({ host: '192.168.88.1', wg_public_key: null });
+  });
+
   it('a connector only polls the routers it is responsible for', async () => {
     w = await createWorld();
     await addConnector(w, 'site-juba');

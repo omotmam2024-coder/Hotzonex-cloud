@@ -7,6 +7,9 @@ type Row<F extends keyof Fns> = Returns<F> extends Array<infer R> ? R : Returns<
 export type JobRow = Row<'connector_claim_jobs'>;
 export type ConnectorRouter = Row<'connector_get_router'>;
 export type DueRouter = Row<'connector_routers_due'>;
+export type TunnelServer = Row<'connector_tunnel_server'>;
+/** The full router row `connector_enable_remote` returns after the move. */
+export type RouterRowAfterEnable = Database['public']['Tables']['routers']['Row'];
 export type Submission = Row<'connector_take_submission'>;
 export type RouterStatusValue = Database['public']['Enums']['router_status'];
 
@@ -102,6 +105,23 @@ export class ConnectorStore {
   async getRouter(routerId: string): Promise<ConnectorRouter | null> {
     const rows = (await this.t.rows('connector_get_router', { p_router_id: routerId })) as ConnectorRouter[];
     return rows[0] ?? null;
+  }
+
+  /**
+   * The connector that serves the tunnel, if any. A site connector on a LAN has
+   * no endpoint of its own, so a router it configures must dial this one.
+   */
+  async tunnelServer(): Promise<TunnelServer | null> {
+    const rows = (await this.t.rows('connector_tunnel_server', {})) as TunnelServer[];
+    return rows[0] ?? null;
+  }
+
+  /** Records the router's public key and moves it onto its tunnel address. */
+  async enableRemote(routerId: string, publicKey: string): Promise<RouterRowAfterEnable> {
+    const rows = (await this.t.rows('connector_enable_remote', { p_router_id: routerId, p_public_key: publicKey })) as RouterRowAfterEnable[];
+    const row = rows[0];
+    if (!row) throw new Error('connector_enable_remote returned no row');
+    return row;
   }
 
   /** Only routers this connector is responsible for, plus any not yet assigned to one. */

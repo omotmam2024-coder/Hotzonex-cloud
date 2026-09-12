@@ -129,6 +129,99 @@ function serviceLines(api: SetupScriptInput['api'], server: string): string[] {
   }
 }
 
+// -----------------------------------------------------------------------------
+// The same tunnel, applied over a connection that already works.
+//
+// A router added on the local network is already reachable with a login that
+// works, so remote access needs no pasted script: the connector configures the
+// tunnel over that connection. These are the RouterOS menus and fields it
+// writes — kept here, with the script, so the command surface stays in one file.
+// -----------------------------------------------------------------------------
+
+export const WG_MENU = '/interface/wireguard';
+export const WG_PEER_MENU = '/interface/wireguard/peers';
+export const IP_ADDRESS_MENU = '/ip/address';
+export const FIREWALL_FILTER_MENU = '/ip/firewall/filter';
+
+/** One idempotent step: find a row, then create or update it. */
+export interface RemoteAccessStep {
+  menu: string;
+  /** Identifies an existing row; `add` when nothing matches, otherwise `set`. */
+  find: Record<string, string>;
+  /** Fields written on both create and update. */
+  set: Record<string, string>;
+  /** Fields written only on create (RouterOS rejects some of them on set). */
+  addOnly?: Record<string, string>;
+}
+
+export interface RemoteAccessPlanInput {
+  tunnel: SetupScriptInput['tunnel'];
+  api: { protocol: ApiProtocol; port: number };
+}
+
+/**
+ * The steps that make a router reachable over the tunnel: its own WireGuard
+ * interface (whose private key it generates and never reveals), the connector
+ * as a peer, the point-to-point address, and a firewall accept for the API from
+ * the connector only.
+ *
+ * The restricted API user is deliberately not part of this: the router already
+ * has a login that works, and replacing it silently would be a surprise.
+ */
+export function buildRemoteAccessPlan(input: RemoteAccessPlanInput): RemoteAccessStep[] {
+  const { tunnel, api } = input;
+  check(IPV4.test(tunnel.routerAddress), 'router tunnel address must be an IPv4 address');
+  check(IPV4.test(tunnel.serverAddress), 'server tunnel address must be an IPv4 address');
+  check(tunnel.routerAddress !== tunnel.serverAddress, 'router and server tunnel addresses must differ');
+  check(WG_KEY_PATTERN.test(tunnel.serverPublicKey), 'server WireGuard public key is not a valid key');
+  check(IPV4.test(tunnel.endpointHost) || HOSTNAME.test(tunnel.endpointHost), 'WireGuard endpoint must be a hostname or IPv4 address');
+  check(Number.isInteger(tunnel.endpointPort) && tunnel.endpointPort > 0 && tunnel.endpointPort < 65536, 'endpoint port is invalid');
+  check(Number.isInteger(api.port) && api.port > 0 && api.port < 65536, 'API port is invalid');
+  const keepalive = tunnel.keepaliveSeconds ?? 25;
+  check(Number.isInteger(keepalive) && keepalive >= 10 && keepalive <= 120, 'keepalive must be 10–120 seconds');
+
+  const server = tunnel.serverAddress;
+  return [
+    {
+      menu: WG_MENU,
+      find: { name: WG_INTERFACE_NAME },
+      set: { mtu: '1420', comment: WG_PEER_COMMENT },
+      addOnly: { name: WG_INTERFACE_NAME, 'listen-port': '13231' },
+    },
+    {
+      menu: WG_PEER_MENU,
+      find: { interface: WG_INTERFACE_NAME, comment: WG_PEER_COMMENT },
+      set: {
+        'public-key': tunnel.serverPublicKey,
+        'endpoint-address': tunnel.endpointHost,
+        'endpoint-port': String(tunnel.endpointPort),
+        'allowed-address': `${server}/32`,
+        'persistent-keepalive': `${keepalive}s`,
+      },
+      addOnly: { interface: WG_INTERFACE_NAME, comment: WG_PEER_COMMENT },
+    },
+    {
+      menu: IP_ADDRESS_MENU,
+      find: { interface: WG_INTERFACE_NAME },
+      set: { address: `${tunnel.routerAddress}/32`, network: server },
+      addOnly: { interface: WG_INTERFACE_NAME, comment: WG_PEER_COMMENT },
+    },
+    {
+      menu: FIREWALL_FILTER_MENU,
+      find: { comment: API_FIREWALL_COMMENT },
+      set: {
+        chain: 'input',
+        action: 'accept',
+        protocol: 'tcp',
+        'in-interface': WG_INTERFACE_NAME,
+        'src-address': server,
+        'dst-port': String(api.port),
+      },
+      addOnly: { comment: API_FIREWALL_COMMENT },
+    },
+  ];
+}
+
 export function buildRouterSetupScript(input: SetupScriptInput): string {
   const { tunnel, api } = input;
   check(IPV4.test(tunnel.routerAddress), 'router tunnel address must be an IPv4 address');

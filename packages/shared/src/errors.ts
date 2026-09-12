@@ -126,6 +126,7 @@ export const DB_HINT_MESSAGES: Record<string, string> = {
   already_member: 'That email already belongs to a Hotzonex Cloud user.',
   self_change: 'You cannot change your own role or status.',
   not_pending: 'This account already has access. Manage it in the team list instead.',
+  invalid_wg_key: 'The router did not return a usable WireGuard key. Try enabling remote access again.',
   invite_required: 'Hotzonex Cloud is invite-only. Ask an administrator for an invitation.',
   invite_invalid: 'This invitation is invalid, expired, or for a different email address.',
   pool_exhausted: 'No tunnel addresses are left. Contact Hotzonex support.',

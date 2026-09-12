@@ -1072,6 +1072,50 @@ export type Database = {
           key_version: number
         }[]
       }
+      connector_enable_remote: {
+        Args: {
+          p_router_id: string
+          p_public_key: string
+        }
+        Returns: {
+          id: string
+          tenant_id: string
+          location_id: string | null
+          name: string
+          host: string
+          api_protocol: Database["public"]["Enums"]["api_protocol"]
+          api_port: number
+          use_ssl: boolean
+          wg_public_key: string | null
+          wg_address: string
+          wg_last_handshake_at: string | null
+          status: Database["public"]["Enums"]["router_status"]
+          status_reason: string | null
+          last_seen_at: string | null
+          last_polled_at: string | null
+          consecutive_failures: number
+          identity: string | null
+          board_name: string | null
+          architecture: string | null
+          routeros_version: string | null
+          uptime_seconds: number | null
+          cpu_load: number | null
+          free_memory: number | null
+          total_memory: number | null
+          credentials_status: Database["public"]["Enums"]["credentials_status"]
+          credentials_updated_at: string | null
+          hotspot_server_id: string | null
+          default_hotspot_profile_id: string | null
+          discovered_at: string | null
+          onboarding_completed_at: string | null
+          is_demo: boolean
+          notes: string | null
+          created_by: string | null
+          created_at: string
+          updated_at: string
+          connector_id: string | null
+        }
+      }
       connector_finish_job: {
         Args: {
           p_job_id: string
@@ -1125,6 +1169,7 @@ export type Database = {
           consecutive_failures: number
           credentials_status: Database["public"]["Enums"]["credentials_status"]
           wg_public_key: string
+          wg_address: string
           wg_last_handshake_at: string
           hotspot_server_id: string
           default_hotspot_profile_id: string
@@ -1252,6 +1297,15 @@ export type Database = {
           tenant_id: string
           sealed: Json
           superseded: boolean
+        }[]
+      }
+      connector_tunnel_server: {
+        Args: never
+        Returns: {
+          connector_id: string
+          wg_server_public_key: string
+          wg_endpoint: string
+          wg_server_address: string
         }[]
       }
       connector_update_ciphertext: {

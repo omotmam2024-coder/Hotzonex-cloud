@@ -14,7 +14,8 @@ import {
   toSystemResource,
   type RawRecord,
 } from '../parse.js';
-import { DEFAULT_TIMEOUT_MS, clampLogLimit, type MikrotikProvider } from '../provider.js';
+import { DEFAULT_TIMEOUT_MS, clampLogLimit, type MikrotikProvider, type RemoteAccessWriter } from '../provider.js';
+import { WG_INTERFACE_NAME, WG_MENU, type RemoteAccessStep } from '../setup-script.js';
 import type {
   ActiveHotspotUser,
   ConnectionParams,
@@ -57,7 +58,7 @@ export const PROPLISTS = {
 } as const;
 
 /** RouterOS binary API over 8728 (plain) or 8729 (api-ssl). */
-export class RouterosApiProvider implements MikrotikProvider {
+export class RouterosApiProvider implements MikrotikProvider, RemoteAccessWriter {
   private client: RouterosApiClient | null = null;
   private readonly timeoutMs: number;
 
@@ -190,5 +191,30 @@ export class RouterosApiProvider implements MikrotikProvider {
     const groupRow = groups[0];
     if (!groupRow) throw new MikrotikError('NOT_FOUND', 'command', `group "${group}" not visible in /user group`);
     return { username: this.params.username, group, policies: parsePolicyList(groupRow['policy']) };
+  }
+
+  /**
+   * Applies the tunnel over the connection we already have. Each step looks for
+   * its row first and updates it rather than adding a second one, so running
+   * this again after a partial failure converges instead of duplicating.
+   */
+  async enableRemoteAccess(steps: readonly RemoteAccessStep[]): Promise<{ publicKey: string }> {
+    for (const step of steps) {
+      const existing = await this.run({ command: `${step.menu}/print`, query: step.find, proplist: ['.id'] });
+      const id = existing[0]?.['.id'];
+      if (id) {
+        await this.run({ command: `${step.menu}/set`, params: { '.id': id, ...step.set } });
+      } else {
+        await this.run({ command: `${step.menu}/add`, params: { ...step.addOnly, ...step.set } });
+      }
+    }
+    const rows = await this.run({
+      command: `${WG_MENU}/print`,
+      query: { name: WG_INTERFACE_NAME },
+      proplist: ['name', 'public-key'],
+    });
+    const key = rows[0]?.['public-key'];
+    if (!key) throw new MikrotikError('UNKNOWN', 'command', 'the router did not report a WireGuard public key');
+    return { publicKey: key };
   }
 }

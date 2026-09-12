@@ -136,6 +136,72 @@ function ConnectStep({
 }
 
 // -----------------------------------------------------------------------------
+// Remote access — the offer, made once the local connection works
+// -----------------------------------------------------------------------------
+function RemoteStep({ router, onNext }: { router: RouterWithLocation; onNext: () => void }) {
+  const enqueue = useEnqueueJob(router.id);
+  const [jobId, setJobId] = useState<string | null>(null);
+  const done = Boolean(router.wg_public_key);
+
+  return (
+    <>
+      <WizardScreen
+        title="Reach this router from anywhere?"
+        illustration={<TunnelCheck />}
+        caption={
+          <>
+            Right now {router.name} can only be managed from this network. Hotzonex can set up a private tunnel so it stays reachable after you leave the
+            site — it dials out, so nothing is exposed to the internet.
+          </>
+        }
+      >
+        <div className="rounded-lg border bg-card p-3 text-sm">
+          <p className="font-medium">What happens if you say yes</p>
+          <ul className="mt-2 grid gap-1.5 text-muted-foreground">
+            <li>Hotzonex configures WireGuard on the router over the connection it already has — nothing to type on the router.</li>
+            <li>
+              The router keeps its own private key and takes the tunnel address{' '}
+              <span className="font-mono text-foreground">{router.wg_address}</span>, reserved for it since it was added.
+            </li>
+            <li>It is managed over the tunnel from then on, so it keeps working when its local address changes.</li>
+          </ul>
+        </div>
+
+        <InlineError error={enqueue.error} />
+        {jobId ? (
+          <JobProgress key={jobId} jobId={jobId} type="router.enable_remote">
+            {(r) => (
+              <p className="text-sm">
+                Remote access is on. This router now answers at <span className="font-mono">{r.address}</span>.
+              </p>
+            )}
+          </JobProgress>
+        ) : null}
+      </WizardScreen>
+
+      <WizardFooter
+        secondary={
+          <Button variant="ghost" size="sm" onClick={onNext}>
+            {done ? 'Continue' : 'Not now — keep it local'}
+          </Button>
+        }
+      >
+        {done ? (
+          <WizardAction onClick={onNext}>Continue</WizardAction>
+        ) : (
+          <WizardAction
+            loading={enqueue.isPending}
+            onClick={() => enqueue.mutate({ type: 'router.enable_remote' }, { onSuccess: (j) => setJobId(j.id) })}
+          >
+            Yes, set up remote access
+          </WizardAction>
+        )}
+      </WizardFooter>
+    </>
+  );
+}
+
+// -----------------------------------------------------------------------------
 // Steps that only explain what to do with the hardware
 // -----------------------------------------------------------------------------
 function PrepareStep({ onNext }: { onNext: () => void }) {
@@ -770,7 +836,8 @@ export function RouterWizardPage() {
       {step === 'credentials' ? <CredentialsStep onNext={next('script')} /> : null}
       {data && step === 'script' ? <ScriptStep router={data} connector={connector.data} onNext={next('key')} /> : null}
       {data && step === 'key' ? <KeyStep router={data} connector={connector.data} onNext={next('test')} /> : null}
-      {data && step === 'test' ? <TestStep router={data} onNext={next('discover')} /> : null}
+      {data && step === 'test' ? <TestStep router={data} onNext={next(mode === 'lan' ? 'remote' : 'discover')} /> : null}
+      {data && step === 'remote' ? <RemoteStep router={data} onNext={next('discover')} /> : null}
       {data && step === 'discover' ? <DiscoverStep router={data} onNext={next('hotspot')} /> : null}
       {data && step === 'hotspot' ? <HotspotStep router={data} onNext={next('location')} /> : null}
       {data && step === 'location' ? <LocationStep router={data} onNext={next('finish')} /> : null}

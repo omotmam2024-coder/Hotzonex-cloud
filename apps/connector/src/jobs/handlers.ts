@@ -1,5 +1,5 @@
-import { MikrotikError, isMikrotikError, type MikrotikProvider } from '@hotzonex/mikrotik';
-import { FORBIDDEN_POLICIES, REQUIRED_POLICIES } from '@hotzonex/mikrotik/setup-script';
+import { MikrotikError, isMikrotikError, isRemoteAccessWriter, type MikrotikProvider } from '@hotzonex/mikrotik';
+import { FORBIDDEN_POLICIES, REQUIRED_POLICIES, buildRemoteAccessPlan } from '@hotzonex/mikrotik/setup-script';
 import { fetchLogsPayloadSchema, ingestCredentialsPayloadSchema, type JobType } from '@hotzonex/shared/jobs';
 import { SealError } from '@hotzonex/shared/sealing';
 import { JobFailure, type JobContext, type JobHandler } from './context.js';
@@ -196,10 +196,55 @@ const ingestCredentials: JobHandler = async (ctx) => {
   return { stored: true, superseded: false, keyVersion };
 };
 
+/**
+ * Configures the WireGuard tunnel on a router we can already reach, so a router
+ * added on the local network becomes reachable from anywhere without anyone
+ * pasting a script. The router generates its own private key and hands back
+ * only the public half.
+ *
+ * The peer is the connector that publishes an endpoint, which is normally not
+ * this one: a site connector sits on the LAN and has no endpoint of its own.
+ */
+const enableRemote: JobHandler = async (ctx) => {
+  const router = requireRouter(ctx);
+  const server = await ctx.store.tunnelServer();
+  if (!server?.wg_endpoint || !server.wg_server_public_key || !server.wg_server_address) {
+    throw new JobFailure('INTERNAL', 'No connector publishes a WireGuard endpoint, so the router has nothing to dial.');
+  }
+  const endpoint = /^(.+):(\d{1,5})$/.exec(server.wg_endpoint);
+  if (!endpoint) throw new JobFailure('INTERNAL', `the tunnel endpoint "${server.wg_endpoint}" is not host:port`);
+  if (!router.wg_address) throw new JobFailure('INTERNAL', 'the router has no tunnel address allocated');
+
+  const steps = buildRemoteAccessPlan({
+    tunnel: {
+      routerAddress: router.wg_address,
+      serverAddress: server.wg_server_address,
+      serverPublicKey: server.wg_server_public_key,
+      endpointHost: endpoint[1] as string,
+      endpointPort: Number(endpoint[2]),
+    },
+    api: { protocol: router.api_protocol, port: router.api_port },
+  });
+
+  const { publicKey } = await onRouter(ctx, async (p) => {
+    if (!isRemoteAccessWriter(p)) {
+      throw new JobFailure('INTERNAL', 'this router is reached with a provider that cannot configure a tunnel');
+    }
+    return p.enableRemoteAccess(steps);
+  });
+
+  // From here the router answers on its tunnel address, and the connector that
+  // serves the tunnel takes it over.
+  const updated = await ctx.store.enableRemote(router.id, publicKey);
+  ctx.log.info({ router_id: router.id, host: updated.host, connector_id: updated.connector_id }, 'remote access enabled');
+  return { publicKey, address: updated.host, connectorId: updated.connector_id };
+};
+
 export const HANDLERS: Record<JobType, { handler: JobHandler; needsConnection: boolean }> = {
   'router.test_connection': { handler: testConnection, needsConnection: true },
   'router.test_permissions': { handler: testPermissions, needsConnection: true },
   'router.sync': { handler: sync, needsConnection: true },
   'router.fetch_logs': { handler: fetchLogs, needsConnection: true },
   'router.ingest_credentials': { handler: ingestCredentials, needsConnection: false },
+  'router.enable_remote': { handler: enableRemote, needsConnection: true },
 };

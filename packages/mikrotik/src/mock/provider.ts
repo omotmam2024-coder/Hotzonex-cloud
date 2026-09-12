@@ -1,5 +1,6 @@
 import { MikrotikError, type MikrotikErrorCode, type MikrotikErrorStage } from '../errors.js';
-import { DEFAULT_TIMEOUT_MS, clampLogLimit, type MikrotikProvider } from '../provider.js';
+import { DEFAULT_TIMEOUT_MS, clampLogLimit, type MikrotikProvider, type RemoteAccessWriter } from '../provider.js';
+import type { RemoteAccessStep } from '../setup-script.js';
 import type {
   ActiveHotspotUser,
   ConnectionParams,
@@ -31,7 +32,8 @@ export type MockMethod =
   | 'getActiveHotspotUsers'
   | 'getLogs'
   | 'getSystemHealth'
-  | 'getCurrentUserPolicies';
+  | 'getCurrentUserPolicies'
+  | 'enableRemoteAccess';
 
 export type MockFailure =
   | { kind: 'error'; code: MikrotikErrorCode; stage?: MikrotikErrorStage; detail?: string }
@@ -70,10 +72,12 @@ export const MOCK_FAILURE_PRESETS = {
  * fixtures), with live-varying CPU/memory/uptime so dashboards look real.
  * Records every call so tests can assert that sync never writes.
  */
-export class MockMikrotikProvider implements MikrotikProvider {
+export class MockMikrotikProvider implements MikrotikProvider, RemoteAccessWriter {
   readonly fixtures: MockFixtures;
-  /** Every method invoked, in order. The mock has no write methods by design (Phase 1). */
+  /** Every method invoked, in order. Enabling remote access is the only write (Phase 1). */
   readonly calls: MockMethod[] = [];
+  /** The steps the last enableRemoteAccess applied, so tests can assert what would reach a router. */
+  readonly remoteAccessSteps: RemoteAccessStep[] = [];
   private connected = false;
   private readonly createdAt: number;
   private readonly now: () => number;
@@ -256,4 +260,29 @@ export class MockMikrotikProvider implements MikrotikProvider {
     await this.read('getCurrentUserPolicies');
     return { username: this.params.username, group: this.fixtures.user.group, policies: [...this.fixtures.user.policies] };
   }
+
+  /**
+   * Pretends the router configured the tunnel and reports a public key. The key
+   * is derived from the host, so a simulated router keeps the same identity
+   * across calls exactly as a real one would.
+   */
+  async enableRemoteAccess(steps: readonly RemoteAccessStep[]): Promise<{ publicKey: string }> {
+    await this.read('enableRemoteAccess');
+    this.remoteAccessSteps.splice(0, this.remoteAccessSteps.length, ...steps);
+    return { publicKey: mockWireguardKey(this.params.host) };
+  }
+}
+
+/** A syntactically valid, stable WireGuard public key for a simulated router. */
+function mockWireguardKey(host: string): string {
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  let seed = 0;
+  for (const ch of `hotzonex-mock-wg:${host}`) seed = (seed * 31 + ch.charCodeAt(0)) >>> 0;
+  let out = '';
+  for (let i = 0; i < 42; i++) {
+    seed = (seed * 1103515245 + 12345) >>> 0;
+    out += alphabet[seed % alphabet.length];
+  }
+  // WireGuard keys are 32 bytes in base64: 43 chars where the last encodes 2 bits, then "=".
+  return `${out}${'AEIMQUYcgkosw048'[seed % 16]}=`;
 }

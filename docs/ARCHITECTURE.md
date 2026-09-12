@@ -152,6 +152,22 @@ the browser could not reach a router even on the same Wi-Fi.
 | `host` | The LAN address, e.g. `192.168.88.1` | The router's own tunnel address, `10.77.x.y` |
 | Needs | **A connector on that same network** | The router to dial out over WireGuard |
 
+**From local to remote, without a script.** A router added on the local network
+is already reachable with a login that works, so once its connection test
+passes the wizard offers remote access. Saying yes queues `router.enable_remote`:
+the site connector configures WireGuard over the connection it already has, the
+router generates its own private key and returns only the public half, and
+`connector_enable_remote` records it, switches `host` to the tunnel address the
+router was allocated when it was created, and hands it to the connector that
+publishes an endpoint. Declining is a real answer — `resumeStep` only offers it
+to a router still on its local address and not yet discovered, so nobody is
+asked twice.
+
+This is the one write Phase 1 performs. It lives in `RemoteAccessWriter`, a
+separate interface implemented by the API, REST and mock providers, so
+`MikrotikProvider` stays read-only (D23) and nothing is stubbed. Every step
+finds its row before writing, so a retry after a half-applied run converges.
+
 **Many sites, many connectors.** A router names the connector responsible for it
 in `routers.connector_id`; `connector_claim_jobs` and `connector_routers_due`
 only return work for that connector, plus routers assigned to none. This is what

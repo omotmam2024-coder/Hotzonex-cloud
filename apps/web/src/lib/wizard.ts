@@ -24,6 +24,7 @@ export const WIZARD_STEPS = [
   { key: 'script', label: 'Run the script', modes: ['tunnel'] },
   { key: 'key', label: 'Paste the key', modes: ['tunnel'] },
   { key: 'test', label: 'Test connection', modes: ['lan', 'tunnel'] },
+  { key: 'remote', label: 'Remote access', modes: ['lan'] },
   { key: 'discover', label: 'Discover', modes: ['lan', 'tunnel'] },
   { key: 'hotspot', label: 'Hotspot', modes: ['lan', 'tunnel'] },
   { key: 'location', label: 'Location', modes: ['lan', 'tunnel'] },
@@ -78,6 +79,10 @@ export function resumeStep(router: RouterState | null | undefined): WizardStep {
   }
 
   if (!router.last_seen_at) return 'test';
+  // Offering remote access is a question, not a requirement: a router that was
+  // asked and declined must not be asked again on every resume, so only a fresh
+  // one — still on its local address, not yet discovered — lands here.
+  if (routerMode(router) === 'lan' && !router.discovered_at && !router.wg_public_key) return 'remote';
   if (!router.discovered_at) return 'discover';
   if (!router.hotspot_server_id) return 'hotspot';
   if (!router.location_id) return 'location';

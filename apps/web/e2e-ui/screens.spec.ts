@@ -37,9 +37,9 @@ test('login rejects a wrong password with a plain sentence', async ({ page }) =>
 test('dashboard: real counts exclude demo routers; problems first; uptime bars', async ({ page }) => {
   await signIn(page);
   const tiles = page.locator('section').filter({ hasText: /^Routers/ }).first();
-  await expect(tiles).toContainText('4');
+  await expect(tiles).toContainText('5');
   await expect(page.getByText('+1 demo, not counted')).toBeVisible();
-  await expect(page.locator('section').filter({ hasText: /^Online/ }).first()).toContainText('1');
+  await expect(page.locator('section').filter({ hasText: /^Online/ }).first()).toContainText('2');
   await expect(page.locator('section').filter({ hasText: /^Offline/ }).first()).toContainText('1');
   // Table on desktop, cards on phones: check whichever is visible.
   const firstRouter = page.locator('tbody tr, ul > li').filter({ visible: true }).first();
@@ -131,6 +131,21 @@ test('a router on this network is added by address, username and password', asyn
   await page.getByLabel('Address').fill('10.77.0.9');
   await page.getByRole('button', { name: 'Connect' }).click();
   await expect(page.getByText(/reserved for Hotzonex tunnels/i)).toBeVisible();
+});
+
+test('a local router is offered remote access, and can decline', async ({ page }) => {
+  await signIn(page);
+  await page.goto('/routers/r-5/onboard');
+  await expect(page.getByRole('heading', { name: 'Reach this router from anywhere?' })).toBeVisible();
+  // The tunnel address was reserved when the router was added; this is where it starts being used.
+  await expect(page.getByText('10.77.0.9')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Yes, set up remote access' })).toBeVisible();
+  await expectNoHorizontalScroll(page);
+  await shot(page, 'wizard-remote');
+
+  // Declining is a first-class answer, not a dead end.
+  await page.getByRole('button', { name: 'Not now — keep it local' }).click();
+  await expect(page.getByRole('heading', { name: 'Discover the router' })).toBeVisible();
 });
 
 test('adding a router over a tunnel starts with a name and a picture of the cable', async ({ page }) => {

@@ -22,6 +22,9 @@ export const JOB_TYPES = {
   'router.sync': { label: 'Discovery & sync', destructive: false, deferWhenOffline: true, maxAttempts: 5, userEnqueueable: true },
   'router.fetch_logs': { label: 'Fetch logs', destructive: false, deferWhenOffline: false, maxAttempts: 1, userEnqueueable: true },
   'router.ingest_credentials': { label: 'Store credentials', destructive: false, deferWhenOffline: false, maxAttempts: 3, userEnqueueable: false },
+  // The one write of Phase 1. Every step is idempotent — it updates the rows it
+  // owns rather than adding more — so a retry after a half-applied run converges.
+  'router.enable_remote': { label: 'Enable remote access', destructive: false, deferWhenOffline: false, maxAttempts: 3, userEnqueueable: true },
 } as const satisfies Record<string, JobTypePolicy>;
 
 export type JobType = keyof typeof JOB_TYPES;
@@ -60,6 +63,7 @@ export const jobPayloadSchemas = {
   'router.sync': emptyPayloadSchema,
   'router.fetch_logs': fetchLogsPayloadSchema,
   'router.ingest_credentials': ingestCredentialsPayloadSchema,
+  'router.enable_remote': emptyPayloadSchema,
 } as const satisfies Record<JobType, z.ZodType>;
 
 // -----------------------------------------------------------------------------
@@ -128,12 +132,23 @@ export const ingestCredentialsResultSchema = z.object({
 });
 export type IngestCredentialsResult = z.infer<typeof ingestCredentialsResultSchema>;
 
+export const enableRemoteResultSchema = z.object({
+  /** The router's own WireGuard public key; its private key never leaves it. */
+  publicKey: z.string(),
+  /** The tunnel address it will answer on from now on. */
+  address: z.string(),
+  /** The connector that takes over once the router is on the tunnel. */
+  connectorId: z.string().nullable(),
+});
+export type EnableRemoteResult = z.infer<typeof enableRemoteResultSchema>;
+
 export const jobResultSchemas = {
   'router.test_connection': testConnectionResultSchema,
   'router.test_permissions': testPermissionsResultSchema,
   'router.sync': syncResultSchema,
   'router.fetch_logs': fetchLogsResultSchema,
   'router.ingest_credentials': ingestCredentialsResultSchema,
+  'router.enable_remote': enableRemoteResultSchema,
 } as const satisfies Record<JobType, z.ZodType>;
 
 export type JobResult<T extends JobType> = z.infer<(typeof jobResultSchemas)[T]>;

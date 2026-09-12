@@ -105,6 +105,17 @@ describe('wizard resume', () => {
 
   it('starts a new router on the local-network path', () => expect(resumeStep(null)).toBe('connect'));
 
+  it('offers remote access to a fresh local router, and stops offering once answered', () => {
+    const fresh = { ...lan, discovered_at: null, wg_public_key: null } as const;
+    expect(resumeStep(fresh as never)).toBe('remote');
+    // Said yes: the router has a tunnel key now, so it moves on.
+    expect(resumeStep({ ...fresh, wg_public_key: 'k' } as never)).toBe('discover');
+    // Said no and carried on: discovery done means the question is behind it.
+    expect(resumeStep({ ...fresh, discovered_at: 'x', hotspot_server_id: null } as never)).toBe('hotspot');
+    // A router that came through the script is already remote; it is never asked.
+    expect(resumeStep({ ...tunnel, discovered_at: null } as never)).toBe('discover');
+  });
+
   it('tells the two paths apart by address', () => {
     expect(routerMode(tunnel)).toBe('tunnel');
     expect(routerMode(lan)).toBe('lan');
@@ -120,7 +131,9 @@ describe('wizard resume', () => {
   });
 
   it('offers only the steps that belong to each path', () => {
-    expect(stepsFor('lan')).toEqual(['connect', 'test', 'discover', 'hotspot', 'location', 'finish']);
+    // Remote access is offered only to a router added locally; one that came
+    // through the script is already on the tunnel.
+    expect(stepsFor('lan')).toEqual(['connect', 'test', 'remote', 'discover', 'hotspot', 'location', 'finish']);
     expect(stepsFor('tunnel')).toEqual(['details', 'prepare', 'credentials', 'script', 'key', 'test', 'discover', 'hotspot', 'location', 'finish']);
   });
 

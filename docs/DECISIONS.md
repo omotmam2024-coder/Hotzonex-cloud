@@ -57,7 +57,9 @@ Each entry: the decision, why, and what it means for later phases. Items marked
 
 ## MikroTik layer
 
-**D23. Phase 1 `MikrotikProvider` is read-only.** The spec's hotspot-user write methods are Phase 2; stubbing them is banned, so they will arrive as a separate `HotspotUserWriter` interface that providers also implement — an addition, not a rewrite (owner-approved).
+**D23. Phase 1 `MikrotikProvider` is read-only**, with one exception added later: `RemoteAccessWriter`, a separate interface every provider implements, configures the WireGuard tunnel on a router the connector can already reach (see ARCHITECTURE, "From local to remote"). The original wording follows.
+
+**D23 (original).** The spec's hotspot-user write methods are Phase 2; stubbing them is banned, so they will arrive as a separate `HotspotUserWriter` interface that providers also implement — an addition, not a rewrite (owner-approved).
 
 **D24. `MIKROTIK_PROVIDER=api|rest` both mean "real routers"; each router's own `api_protocol` picks the binary API or REST.** A fleet can mix both. `mock` serves every router from the mock provider; DEMO routers are always mock-served.
 
