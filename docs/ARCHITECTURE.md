@@ -181,11 +181,18 @@ Drift is never auto-resolved; a technician acknowledges it.
 - The connector bundle (`dist/main.js`) — booted against an in-memory data plane.
 - The web UI — production bundle rendered at 360 px and desktop.
 
+**Exercised against the hosted stack**
+- Every migration is applied to the hosted Supabase project, with RLS enabled on
+  every public table and no `anon` policy on any of them.
+- The onboarding E2E suite, against hosted Supabase with a mock connector.
+- The web bundle on Vercel: SPA rewrites, CSP/HSTS and asset caching verified on
+  the deployed origin.
+
 **Written but not yet executed against the real thing**
 - A real RouterOS device or CHR (`pnpm test:live` exists, skipped by default).
-- A real Supabase stack (local Docker or hosted) — including the `auth.sessions`
-  login/logout trigger and Realtime delivery.
-- The Playwright E2E suite (`pnpm test:e2e`).
+- The `auth.sessions` login/logout trigger and Realtime delivery against a real
+  Supabase stack.
+- The Playwright E2E suite beyond the onboarding spec (`pnpm test:e2e`).
 - The `wg` CLI path on a Linux VPS; the Docker image; the systemd unit.
 
 **Simulated by design**

@@ -66,13 +66,14 @@ docs                 ARCHITECTURE, RUNBOOK, ROUTER_SETUP, DECISIONS.
 
 | Area | Status |
 |---|---|
-| Schema, RLS, RPCs, audit triggers, job lifecycle | Real SQL, tested on Postgres 18 (PGlite) with Supabase's permissive default grants. **Not yet run on a Supabase instance** (no Docker on the build machine). |
+| Schema, RLS, RPCs, audit triggers, job lifecycle | Real SQL, tested on Postgres 18 (PGlite) with Supabase's permissive default grants. **Applied to the hosted Supabase project** and in use there: all 9 migrations recorded, RLS enabled on every public table with no `anon` policy, and the deny-all credential/token tables carry no policies at all. |
 | RouterOS binary API client | Real implementation of the published protocol (incl. 7.18 `!empty`). Tested against an in-process fake RouterOS server. **Not yet tested against a real router or CHR.** |
 | RouterOS REST provider | Real implementation, tested against a fake HTTP endpoint. **Not tested against a real router.** |
 | Connector ↔ Supabase transport | Real supabase-js client, tested against a PostgREST stand-in; bundle smoke-tested. |
 | WireGuard peer management | `wg` CLI manager is real code, **untested against a real interface**. `wg show dump` parsing is tested. With `MIKROTIK_PROVIDER=mock` a clearly labelled simulated manager is used. |
 | MockMikrotikProvider | Used for development and always for DEMO routers. The UI shows a MOCK banner whenever the connector runs in mock mode. |
-| Web UI | Rendered and checked at 360 px and 1366 px against an intercepted backend. The full E2E suite is written but **has not been executed** (needs the Docker stack). |
+| Web UI | Rendered and checked at 360 px and 1366 px against an intercepted backend (12 Playwright checks, passing). The onboarding E2E suite has been run against the live stack; the **remaining E2E specs still need the Docker stack**. |
+| Web deployment | **Live on Vercel** from `main` (Root Directory `apps/web`): SPA rewrites, CSP/HSTS and immutable asset caching all verified on the deployed origin. |
 | Docker image, systemd unit | Written, **not built/run here** (no Docker). |
 
 Details and the riskiest gaps: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#what-is-mocked-versus-real).

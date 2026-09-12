@@ -95,6 +95,25 @@ A free MikroTik **CHR** VM works for this.
 4. Deploy. `vercel.json` adds SPA rewrites and security headers. If Supabase is on
    a custom domain, add it to `connect-src` in the CSP.
 
+**If the Root Directory is wrong, the build still reports success.** Vercel then
+runs the root `pnpm -r build` (or the wrong package's), publishes whatever `dist`
+it finds — the connector's esbuild bundle, say — and marks the deployment READY
+while the site serves 404 at `/`. Everything in `vercel.json` resolves relative
+to the Root Directory, so a stray `vercel.json` at the repo root does not fix it
+and the SPA rewrite and CSP headers silently go missing. Symptoms and check:
+
+| Symptom | Check |
+|---|---|
+| `/` returns 404 on a READY deployment | Build log line `> @hotzonex/<pkg> build` — must be `web` |
+| `/` works, deep links 404, no CSP header | `apps/web/vercel.json` is not being read → Root Directory |
+
+```bash
+vercel project update hotzonex.net --root-directory apps/web \
+  --auto-detect build-command --auto-detect output-directory --yes
+curl -sI https://<domain>/settings | head -1        # expect 200, not 404
+curl -sI https://<domain>/ | grep -i content-security-policy
+```
+
 ### 2.3 Connector on a VPS
 
 Any small Linux VPS with a public IPv4 (1 vCPU / 1 GB is plenty for hundreds of
