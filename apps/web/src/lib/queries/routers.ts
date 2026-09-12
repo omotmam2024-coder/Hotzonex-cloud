@@ -8,8 +8,11 @@ import type {
   RouterRow,
   SyncDriftRow,
 } from '@hotzonex/shared/database';
-import type { RouterInput } from '@hotzonex/shared/schemas';
-import { toAppError, unwrap } from '../errors';
+import type { JobRow } from '@hotzonex/shared/database';
+import type { RouterConnectionInput, RouterInput } from '@hotzonex/shared/schemas';
+import { sealCredentials, type SealedEnvelope, type SealingPublicKey } from '@hotzonex/shared/sealing';
+import { AppError, toAppError, unwrap } from '../errors';
+import { newIdempotencyKey } from '../utils';
 import { useRealtimeInvalidate } from '../realtime';
 import { getSupabase } from '../supabase';
 import { qk } from './keys';
@@ -132,6 +135,133 @@ export function useCreateRouter() {
           .single(),
       ) as { id: string },
     onSuccess: () => qc.invalidateQueries({ queryKey: qk.routers() }),
+  });
+}
+
+/**
+ * Add a router that is on the same network as the connector, in one action:
+ * create it at the given address, seal the login the technician typed to the
+ * connector's public key, and queue the connection test.
+ *
+ * The password is sealed in the browser and never stored here; the connector is
+ * the only thing that can open the envelope. If sealing or the test queue fails
+ * the router row is left in place — it has no credentials, so it is inert, and
+ * the wizard offers to try again rather than losing what was typed.
+ */
+export function useConnectRouter() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      input,
+      tenantId,
+      sealingKey,
+    }: {
+      input: RouterConnectionInput;
+      tenantId: string;
+      sealingKey: SealingPublicKey | null;
+    }): Promise<{ routerId: string; credentialJob: JobRow; testJob: JobRow }> => {
+      if (!sealingKey) {
+        throw new AppError(
+          'The Hotzonex connector has not published its encryption key yet, so the password cannot be sent securely. Check that the connector is running.',
+          'unknown',
+        );
+      }
+      const db = getSupabase();
+      const router = unwrap(
+        await db
+          .from('routers')
+          .insert({
+            tenant_id: tenantId,
+            name: input.name,
+            host: input.host,
+            api_protocol: input.api_protocol,
+            api_port: input.api_port,
+            use_ssl: input.use_ssl,
+            notes: input.notes,
+          })
+          .select('id')
+          .single(),
+      ) as { id: string };
+
+      let envelope: SealedEnvelope;
+      try {
+        envelope = await sealCredentials(sealingKey, router.id, { username: input.username, password: input.password });
+      } catch {
+        throw new AppError('This browser cannot encrypt the password. Use a current version of Chrome, Firefox, Edge or Safari over HTTPS.', 'unknown');
+      }
+      const credentialJob = unwrap(
+        await db.rpc('submit_router_credentials', {
+          p_router_id: router.id,
+          p_sealed: envelope as never,
+          p_idempotency_key: newIdempotencyKey(),
+        }),
+      ) as JobRow;
+
+      const testJob = unwrap(
+        await db.rpc('enqueue_router_job', {
+          p_router_id: router.id,
+          p_type: 'router.test_connection',
+          p_idempotency_key: newIdempotencyKey(),
+          p_payload: {},
+        }),
+      ) as JobRow;
+
+      return { routerId: router.id, credentialJob, testJob };
+    },
+    onSuccess: ({ routerId, credentialJob, testJob }) => {
+      qc.setQueryData(qk.job(credentialJob.id), credentialJob);
+      qc.setQueryData(qk.job(testJob.id), testJob);
+      void qc.invalidateQueries({ queryKey: qk.routers() });
+      void qc.invalidateQueries({ queryKey: qk.router(routerId) });
+    },
+  });
+}
+
+/**
+ * Give an existing local router a working login again — after a password
+ * change on the router, or a rejected envelope. Its address may have moved too,
+ * so the connection fields are saved with it.
+ */
+export function useReconnectRouter(routerId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ input, sealingKey }: { input: RouterConnectionInput; sealingKey: SealingPublicKey | null }) => {
+      if (!sealingKey) {
+        throw new AppError(
+          'The Hotzonex connector has not published its encryption key yet, so the password cannot be sent securely. Check that the connector is running.',
+          'unknown',
+        );
+      }
+      const db = getSupabase();
+      const { error } = await db
+        .from('routers')
+        .update({ host: input.host, api_protocol: input.api_protocol, api_port: input.api_port, use_ssl: input.use_ssl })
+        .eq('id', routerId);
+      if (error) throw toAppError(error);
+
+      let envelope: SealedEnvelope;
+      try {
+        envelope = await sealCredentials(sealingKey, routerId, { username: input.username, password: input.password });
+      } catch {
+        throw new AppError('This browser cannot encrypt the password. Use a current version of Chrome, Firefox, Edge or Safari over HTTPS.', 'unknown');
+      }
+      unwrap(
+        await db.rpc('submit_router_credentials', { p_router_id: routerId, p_sealed: envelope as never, p_idempotency_key: newIdempotencyKey() }),
+      );
+      return unwrap(
+        await db.rpc('enqueue_router_job', {
+          p_router_id: routerId,
+          p_type: 'router.test_connection',
+          p_idempotency_key: newIdempotencyKey(),
+          p_payload: {},
+        }),
+      ) as JobRow;
+    },
+    onSuccess: (job) => {
+      qc.setQueryData(qk.job(job.id), job);
+      void qc.invalidateQueries({ queryKey: qk.router(routerId) });
+      void qc.invalidateQueries({ queryKey: qk.routers() });
+    },
   });
 }
 

@@ -3,7 +3,7 @@ import { MIKROTIK_ERROR_CODES } from '@hotzonex/mikrotik/errors';
 import { DB_HINT_MESSAGES, JOB_ERROR_MESSAGES, MIKROTIK_ERROR_MESSAGES, describeJobError } from '../src/errors.js';
 import { JOB_ERROR_CODES } from '../src/jobs.js';
 import { capabilitiesFor } from '../src/roles.js';
-import { locationSchema, routerSchema } from '../src/schemas.js';
+import { locationSchema, routerConnectionSchema, routerSchema } from '../src/schemas.js';
 import { assessHealth, statusAfterFailure } from '../src/status.js';
 import { formatBytes, formatDuration, formatRelative, freshness } from '../src/time.js';
 
@@ -95,5 +95,31 @@ describe('boundary schemas', () => {
     expect(routerSchema.parse({ name: 'r', location_id: null, api_protocol: 'api', api_port: 8728, use_ssl: true, notes: '' }).use_ssl).toBe(false);
     expect(routerSchema.parse({ name: 'r', location_id: null, api_protocol: 'api_ssl', api_port: 8729, use_ssl: false, notes: '' }).use_ssl).toBe(true);
     expect(routerSchema.safeParse({ name: 'r', location_id: null, api_protocol: 'telnet', api_port: 23, use_ssl: false, notes: '' }).success).toBe(false);
+  });
+
+  describe('adding a router on the local network', () => {
+    const base = { name: 'Gate', host: '192.168.88.1', api_protocol: 'api', api_port: 8728, use_ssl: false, username: 'admin', password: 'secret', notes: '' };
+
+    it('takes an address, a username and a password that may be blank', () => {
+      expect(routerConnectionSchema.parse(base)).toMatchObject({ host: '192.168.88.1', username: 'admin' });
+      // Older boards ship with no password at all; refusing one would lock the technician out of the flow.
+      expect(routerConnectionSchema.safeParse({ ...base, password: '' }).success).toBe(true);
+      expect(routerConnectionSchema.safeParse({ ...base, username: '' }).success).toBe(false);
+    });
+
+    it('rejects addresses that are not a reachable IPv4 router', () => {
+      for (const host of ['192.168.88', 'router.local', '192.168.88.256', '', '1.2.3.4.5']) {
+        expect(routerConnectionSchema.safeParse({ ...base, host }).success, host).toBe(false);
+      }
+      expect(routerConnectionSchema.safeParse({ ...base, host: '10.0.0.1' }).success).toBe(true);
+    });
+
+    it('keeps the tunnel pool and the connector’s own loopback out of reach', () => {
+      // 10.77.0.0/16 is handed out to tunnels; pointing a router there from this
+      // form would aim the connector at another router, or at itself.
+      for (const host of ['10.77.0.5', '127.0.0.1', '169.254.169.254', '0.0.0.0']) {
+        expect(routerConnectionSchema.safeParse({ ...base, host }).success, host).toBe(false);
+      }
+    });
   });
 });

@@ -103,9 +103,39 @@ test('onboarding wizard shows the RouterOS script with the router’s own addres
   await shot(page, 'wizard-key');
 });
 
-test('adding a router starts with a name and a picture of the cable', async ({ page }) => {
+test('a router on this network is added by address, username and password', async ({ page }) => {
   await signIn(page);
   await page.goto('/routers/new');
+  await expect(page.getByRole('heading', { name: 'Add a router on this network' })).toBeVisible();
+
+  // The defaults are what a factory-fresh MikroTik answers on.
+  await expect(page.getByLabel('Address')).toHaveValue('192.168.88.1');
+  await expect(page.getByLabel('Username')).toHaveValue('admin');
+  await expect(page.getByLabel('Port')).toHaveValue('8728');
+
+  // The password is typed, hidden by default, and revealable.
+  const password = page.getByLabel('Password', { exact: true });
+  await expect(password).toHaveAttribute('type', 'password');
+  await password.fill('router-secret');
+  await page.getByRole('button', { name: 'Show password' }).click();
+  await expect(password).toHaveAttribute('type', 'text');
+  await expectNoHorizontalScroll(page);
+  await shot(page, 'wizard-lan-connect');
+
+  // The connector opens the connection, so it must stay on a private network.
+  await page.getByLabel('Address').fill('8.8.8.8');
+  await page.getByLabel('Name *', { exact: true }).fill('Juba Market Gate');
+  await page.getByRole('button', { name: 'Connect' }).click();
+  await expect(page.getByText(/private network/i)).toBeVisible();
+
+  await page.getByLabel('Address').fill('10.77.0.9');
+  await page.getByRole('button', { name: 'Connect' }).click();
+  await expect(page.getByText(/reserved for Hotzonex tunnels/i)).toBeVisible();
+});
+
+test('adding a router over a tunnel starts with a name and a picture of the cable', async ({ page }) => {
+  await signIn(page);
+  await page.goto('/routers/new?mode=tunnel');
   await expect(page.getByRole('heading', { name: 'Name this router' })).toBeVisible();
   // Connection settings are real but folded away: onboarding asks for a name and nothing else.
   await expect(page.getByLabel('Router name')).toBeVisible();

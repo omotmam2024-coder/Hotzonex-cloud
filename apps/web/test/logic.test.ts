@@ -5,7 +5,7 @@ import { toAppError } from '@/lib/errors';
 import { readEnv } from '@/lib/env';
 import { describeConnector } from '@/lib/queries/misc';
 import { PERSISTED_QUERY_ROOTS, shouldPersist } from '@/lib/query-client';
-import { previousStep, resumeStep } from '@/lib/wizard';
+import { previousStep, resumeStep, routerMode, stepsFor } from '@/lib/wizard';
 import { countRouters } from '@/pages/dashboard';
 
 describe('dashboard counts', () => {
@@ -59,8 +59,12 @@ describe('uptime series', () => {
 });
 
 describe('wizard resume', () => {
-  const base = {
+  // A tunnel router is reached at its own tunnel address; anything else was
+  // added by address on the local network.
+  const tunnel = {
     credentials_status: 'set',
+    host: '10.77.0.5',
+    wg_address: '10.77.0.5',
     wg_public_key: 'k',
     is_demo: false,
     last_seen_at: 'x',
@@ -69,6 +73,8 @@ describe('wizard resume', () => {
     onboarding_completed_at: null,
     location_id: 'l',
   } as const;
+  const lan = { ...tunnel, host: '192.168.88.1' } as const;
+
   it.each([
     [{}, 'finish'],
     // No credentials, or no tunnel key, both send the technician back to the
@@ -80,22 +86,50 @@ describe('wizard resume', () => {
     [{ discovered_at: null }, 'discover'],
     [{ hotspot_server_id: null }, 'hotspot'],
     [{ location_id: null }, 'location'],
-  ])('%j → %s', (patch, step) => {
-    expect(resumeStep({ ...base, ...patch } as never)).toBe(step);
+  ])('tunnel %j → %s', (patch, step) => {
+    expect(resumeStep({ ...tunnel, ...patch } as never)).toBe(step);
   });
-  it('starts at details without a router', () => expect(resumeStep(null)).toBe('details'));
+
+  it.each([
+    [{}, 'finish'],
+    // A local router has no script and no tunnel key to wait for: the only
+    // thing that can be missing is a login that works.
+    [{ credentials_status: 'not_set' }, 'connect'],
+    [{ credentials_status: 'rejected' }, 'connect'],
+    [{ wg_public_key: null }, 'finish'],
+    [{ last_seen_at: null }, 'test'],
+    [{ discovered_at: null }, 'discover'],
+  ])('lan %j → %s', (patch, step) => {
+    expect(resumeStep({ ...lan, ...patch } as never)).toBe(step);
+  });
+
+  it('starts a new router on the local-network path', () => expect(resumeStep(null)).toBe('connect'));
+
+  it('tells the two paths apart by address', () => {
+    expect(routerMode(tunnel)).toBe('tunnel');
+    expect(routerMode(lan)).toBe('lan');
+  });
 
   it('never resumes into a step that only explains the hardware', () => {
     const explainOnly = ['prepare', 'credentials', 'key'];
-    for (const patch of [{}, { credentials_status: 'not_set' }, { wg_public_key: null }, { last_seen_at: null }, { location_id: null }]) {
-      expect(explainOnly).not.toContain(resumeStep({ ...base, ...patch } as never));
+    for (const base of [tunnel, lan]) {
+      for (const patch of [{}, { credentials_status: 'not_set' }, { wg_public_key: null }, { last_seen_at: null }, { location_id: null }]) {
+        expect(explainOnly).not.toContain(resumeStep({ ...base, ...patch } as never));
+      }
     }
   });
 
+  it('offers only the steps that belong to each path', () => {
+    expect(stepsFor('lan')).toEqual(['connect', 'test', 'discover', 'hotspot', 'location', 'finish']);
+    expect(stepsFor('tunnel')).toEqual(['details', 'prepare', 'credentials', 'script', 'key', 'test', 'discover', 'hotspot', 'location', 'finish']);
+  });
+
   it('steps back one screen, and leaves the wizard from the first', () => {
-    expect(previousStep('prepare')).toBe('details');
-    expect(previousStep('key')).toBe('script');
-    expect(previousStep('details')).toBeNull();
+    expect(previousStep('prepare', 'tunnel')).toBe('details');
+    expect(previousStep('key', 'tunnel')).toBe('script');
+    expect(previousStep('details', 'tunnel')).toBeNull();
+    expect(previousStep('test', 'lan')).toBe('connect');
+    expect(previousStep('connect', 'lan')).toBeNull();
   });
 });
 

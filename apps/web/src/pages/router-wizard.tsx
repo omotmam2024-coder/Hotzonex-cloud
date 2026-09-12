@@ -1,6 +1,6 @@
 import { Check, RefreshCw, ShieldCheck } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import {
   DEFAULT_API_USERNAME,
   SetupScriptInputError,
@@ -8,10 +8,12 @@ import {
   generateApiPassword,
   parsePastedPublicKey,
 } from '@hotzonex/mikrotik/setup-script';
+import type { RouterConnectionInput } from '@hotzonex/shared/schemas';
 import { formatBytes, formatDuration } from '@hotzonex/shared/time';
 import { CopyButton } from '@/components/copy-button';
 import { ConnectionResultView, PermissionsResultView, SyncResultView } from '@/components/job-results';
 import { JobProgress } from '@/components/job-progress';
+import { RouterConnectForm } from '@/components/router-connect-form';
 import { RouterForm } from '@/components/router-form';
 import { ConnectToInternet, FactoryLabel, PasteKeyBack, TerminalScript, TunnelCheck } from '@/components/router-illustrations';
 import { EmptyState, ErrorState, InlineError } from '@/components/states';
@@ -24,11 +26,97 @@ import { WizardAction, WizardFooter, WizardHeader, WizardNote, WizardScreen } fr
 import { useAuth } from '@/lib/auth';
 import { useEnqueueJob, useSubmitCredentials } from '@/lib/queries/jobs';
 import { useAssignRouterLocation, useConnector, useLocations, type ConnectorView } from '@/lib/queries/misc';
-import { useCreateRouter, useRouter, useRouterHotspot, useUpdateRouter, type RouterWithLocation } from '@/lib/queries/routers';
+import {
+  useConnectRouter,
+  useCreateRouter,
+  useReconnectRouter,
+  useRouter,
+  useRouterHotspot,
+  useUpdateRouter,
+  type RouterWithLocation,
+} from '@/lib/queries/routers';
 import { cn, randomBytes } from '@/lib/utils';
-import { WIZARD_STEPS, previousStep, resumeStep, stepIndex, type WizardStep } from '@/lib/wizard';
+import { previousStep, resumeStep, routerMode, stepIndex, stepsFor, type WizardMode, type WizardStep } from '@/lib/wizard';
 
 const DETAILS_FORM = 'router-details-form';
+const CONNECT_FORM = 'router-connect-form';
+
+// -----------------------------------------------------------------------------
+// Connect — a router on this network, by address and login
+// -----------------------------------------------------------------------------
+function ConnectStep({
+  router,
+  connector,
+  onConnected,
+}: {
+  router: RouterWithLocation | undefined;
+  connector: ConnectorView | undefined;
+  onConnected: (routerId: string) => void;
+}) {
+  const { profile } = useAuth();
+  const connect = useConnectRouter();
+  const reconnect = useReconnectRouter(router?.id ?? '');
+
+  if (connector?.row && !connector.sealingKey) {
+    return (
+      <ErrorState
+        human={{
+          title: 'The connector has not published an encryption key',
+          explanation: 'The router’s password is encrypted in this browser to a key the connector publishes, so it cannot be sent until that key exists.',
+          nextAction: 'Check that the connector is running, then reload this page.',
+        }}
+      />
+    );
+  }
+
+  const submit = (values: RouterConnectionInput) => {
+    if (router) {
+      reconnect.mutate({ input: values, sealingKey: connector?.sealingKey ?? null }, { onSuccess: () => onConnected(router.id) });
+      return;
+    }
+    if (!profile) return;
+    connect.mutate(
+      { input: values, tenantId: profile.tenant_id, sealingKey: connector?.sealingKey ?? null },
+      { onSuccess: ({ routerId }) => onConnected(routerId) },
+    );
+  };
+
+  const active = router ? reconnect : connect;
+
+  return (
+    <>
+      <WizardScreen
+        title={router ? 'Sign in to this router again' : 'Add a router on this network'}
+        caption={
+          router
+            ? 'Hotzonex has no working login for this router. Enter one that does and it will reconnect.'
+            : 'Enter the router’s address and a login that already works on it.'
+        }
+      >
+        <RouterConnectForm
+          id={CONNECT_FORM}
+          defaults={router ? { name: router.name, host: router.host, api_protocol: router.api_protocol, api_port: router.api_port, use_ssl: router.use_ssl } : undefined}
+          lockName={Boolean(router)}
+          onSubmit={submit}
+          pending={active.isPending}
+          error={active.error}
+        />
+        <WizardNote>
+          Hotzonex reaches routers through the connector, so the connector has to be on this network too. For a site behind CGNAT that nothing can dial into,{' '}
+          <Link className="underline" to="/routers/new?mode=tunnel">
+            set it up over a tunnel
+          </Link>{' '}
+          instead.
+        </WizardNote>
+      </WizardScreen>
+      <WizardFooter>
+        <WizardAction type="submit" form={CONNECT_FORM} loading={active.isPending}>
+          Connect
+        </WizardAction>
+      </WizardFooter>
+    </>
+  );
+}
 
 // -----------------------------------------------------------------------------
 // Steps that only explain what to do with the hardware
@@ -566,12 +654,18 @@ function FinishStep({ router }: { router: RouterWithLocation }) {
 // -----------------------------------------------------------------------------
 export function RouterWizardPage() {
   const { id } = useParams();
+  const [search] = useSearchParams();
   const navigate = useNavigate();
   const { profile, can } = useAuth();
   const router = useRouter(id);
   const connector = useConnector();
   const create = useCreateRouter();
-  const [step, setStep] = useState<WizardStep | null>(id ? null : 'details');
+  // A new router starts on whichever path was asked for; an existing one is
+  // read from its address — a router reached at its own tunnel address took the
+  // script route.
+  const requested: WizardMode = search.get('mode') === 'tunnel' ? 'tunnel' : 'lan';
+  const mode: WizardMode = router.data ? routerMode(router.data) : requested;
+  const [step, setStep] = useState<WizardStep | null>(id ? null : requested === 'tunnel' ? 'details' : 'connect');
 
   // Resume where the router left off, once its data arrives (state adjusted during render, not in an effect).
   if (step === null && router.data) setStep(resumeStep(router.data));
@@ -583,9 +677,8 @@ export function RouterWizardPage() {
   const next = (s: WizardStep) => () => go(s);
 
   const onBack = () => {
-    const prev = step ? previousStep(step) : null;
-    // The first step, and any step reached on a router that already exists, leaves the wizard.
-    if (!prev || step === 'details') {
+    const prev = step ? previousStep(step, mode) : null;
+    if (!prev) {
       navigate(id ? `/routers/${id}` : '/routers');
       return;
     }
@@ -596,12 +689,12 @@ export function RouterWizardPage() {
     return <EmptyState title="You cannot add routers" description="Only admins and technicians can onboard routers." />;
   }
 
-  const current = step ?? 'details';
+  const current = step ?? (mode === 'tunnel' ? 'details' : 'connect');
   const data = router.data;
 
   return (
     <>
-      <WizardHeader title={data ? data.name : 'New router'} step={stepIndex(current)} total={WIZARD_STEPS.length} onBack={onBack} />
+      <WizardHeader title={data ? data.name : 'New router'} step={stepIndex(current, mode)} total={stepsFor(mode).length} onBack={onBack} />
 
       {data?.is_demo ? (
         <p className="mx-auto mb-4 flex w-full max-w-xl items-center gap-2 text-sm text-muted-foreground">
@@ -611,6 +704,17 @@ export function RouterWizardPage() {
 
       {id && router.isPending ? <Skeleton className="h-64" /> : null}
       {id && router.isError ? <ErrorState error={router.error} onRetry={() => void router.refetch()} /> : null}
+
+      {step === 'connect' && (!id || data) ? (
+        <ConnectStep
+          router={data}
+          connector={connector.data}
+          onConnected={(routerId) => {
+            if (!id) navigate(`/routers/${routerId}/onboard`, { replace: true });
+            go('test');
+          }}
+        />
+      ) : null}
 
       {step === 'details' ? (
         <>

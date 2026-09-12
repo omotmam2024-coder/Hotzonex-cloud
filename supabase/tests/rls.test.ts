@@ -239,10 +239,33 @@ describe('roles', () => {
   });
 
   it('users cannot write connector-owned router columns (status, telemetry, tunnel, credentials state, demo flag)', async () => {
-    for (const col of ["status = 'online'", 'last_seen_at = now()', "host = '8.8.8.8'", "wg_address = '10.77.9.9'",
+    for (const col of ["status = 'online'", 'last_seen_at = now()', "wg_address = '10.77.9.9'",
                        "credentials_status = 'set'", 'is_demo = true', 'tenant_id = tenant_id']) {
       expect(await attempt(user(adminA), (tx) => tx.query(`update public.routers set ${col} where id = $1`, [routerA.id])), col).toBe('denied');
     }
+  });
+
+  it('an operator may point a router at a private address, but nowhere else', async () => {
+    // Onboarding a router over the LAN means naming the address the connector
+    // dials, so `host` is writable — but the connector opens that connection,
+    // and in REST mode it is an HTTP client. It must stay on private networks.
+    expect(await attempt(user(adminA), (tx) => tx.query(`update public.routers set host = '192.168.88.1' where id = $1`, [routerA.id]))).toBe(1);
+
+    for (const host of ['8.8.8.8', '127.0.0.1', '169.254.169.254', '0.0.0.0']) {
+      await expect(
+        as(db, user(adminA), (tx) => tx.query(`update public.routers set host = $1 where id = $2`, [host, routerA.id])),
+        host,
+      ).rejects.toThrow(/routers_host_is_private/);
+    }
+
+    // 10.77.0.0/16 belongs to the tunnel pool: a router may sit at its own
+    // tunnel address, but must never be aimed at another router's.
+    await expect(
+      as(db, user(adminA), (tx) => tx.query(`update public.routers set host = '10.77.9.9' where id = $1`, [routerA.id])),
+    ).rejects.toThrow(/routers_host_not_another_tunnel/);
+    expect(
+      await attempt(user(adminA), (tx) => tx.query(`update public.routers set host = wg_address where id = $1`, [routerA.id])),
+    ).toBe(1);
   });
 
   it('users cannot insert, update or delete jobs directly', async () => {

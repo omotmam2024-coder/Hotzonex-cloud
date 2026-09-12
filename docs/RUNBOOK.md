@@ -114,7 +114,26 @@ curl -sI https://<domain>/settings | head -1        # expect 200, not 404
 curl -sI https://<domain>/ | grep -i content-security-policy
 ```
 
-### 2.3 Connector on a VPS
+### 2.3 Where the connector runs decides how routers are added
+
+The connector opens every router connection, so it has to be able to reach the
+address on the router's row. That is what picks the onboarding path, not taste:
+
+- **Routers on a LAN** (`Add a router on this network`: address, username,
+  password) need a connector **on that LAN** — the office server, or a technician's
+  laptop running `pnpm --filter @hotzonex/connector dev`. A connector on a VPS
+  cannot see `192.168.88.1`, and the connection test will fail with a network
+  error however correct the password is.
+- **Routers at remote sites behind CGNAT** use the tunnel path
+  (`/routers/new?mode=tunnel`): the setup script puts the router on WireGuard, it
+  dials out to the VPS, and the connector reaches it at `10.77.x.y`.
+
+Running both is normal: a connector on the office LAN for local routers, and one
+on the VPS for the tunnelled fleet. Each claims jobs for the routers it can
+reach; a job for an unreachable router simply fails its connection test and can
+be retried from the router page.
+
+### 2.4 Connector on a VPS
 
 Any small Linux VPS with a public IPv4 (1 vCPU / 1 GB is plenty for hundreds of
 routers). Ubuntu 24.04 shown.

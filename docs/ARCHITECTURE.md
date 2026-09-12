@@ -136,6 +136,29 @@ read the credential tables or call the functions that return ciphertext),
 `apps/web/e2e/onboarding.spec.ts` (absent from every network response and browser
 storage), `apps/web/e2e-ui/screens.spec.ts` (generated password not persisted).
 
+### Two ways a router is onboarded
+
+Both end in the same place — an address in `routers.host`, a login sealed to the
+connector, and a queued `router.test_connection` — and both are carried out by
+the connector, never by the browser. A page served over HTTPS cannot open
+`http://192.168.88.1` (mixed content), and RouterOS sends no CORS headers, so
+the browser could not reach a router even on the same Wi-Fi.
+
+| | On this network (default) | Over a tunnel |
+|---|---|---|
+| When | The technician and the connector are on the router's LAN | The site is behind CGNAT and nothing can dial in |
+| Asks for | Address, port, username, password | A name, then a generated setup script |
+| The router's login | One that already exists, typed in | A restricted `hotzonex-api` user the script creates |
+| `host` | The LAN address, e.g. `192.168.88.1` | The router's own tunnel address, `10.77.x.y` |
+| Needs | **A connector on that same network** | The router to dial out over WireGuard |
+
+`routerMode()` tells them apart by address: a router reached at its own
+`wg_address` came through the script. The database keeps that honest —
+`routers_host_is_private` restricts `host` to RFC1918 (so the connector can
+never be aimed at the public internet, its own loopback, or link-local
+metadata), and `routers_host_not_another_tunnel` stops one router being pointed
+at another's tunnel address.
+
 ### Non-destructive sync and drift
 
 Sync only **reads** the router. Hotzonex mirrors what it sees; items that vanish are
