@@ -1,34 +1,30 @@
 {
   "name": "hotzonex-cloud",
   "private": true,
-  "description": "Hotzonex Cloud — MikroTik Hotspot Management & WiFi Platform",
-  "packageManager": "pnpm@10.34.5",
-  "engines": {
-    "node": ">=22.12"
-  },
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "pnpm --parallel --filter @hotzonex/web --filter @hotzonex/connector dev",
-    "build": "pnpm -r --if-present build",
-    "lint": "eslint . --max-warnings=0",
-    "typecheck": "pnpm -r --if-present typecheck",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "test:e2e": "pnpm --filter @hotzonex/web test:e2e",
-    "test:live": "pnpm --filter @hotzonex/mikrotik test:live",
-    "db:migrate": "pnpm --filter @hotzonex/db migrate",
-    "db:seed": "pnpm --filter @hotzonex/db seed",
-    "db:types": "pnpm --filter @hotzonex/db types",
-    "db:types:offline": "pnpm --filter @hotzonex/db types:offline"
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "test:db": "bash supabase/tests/run.sh"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.117.3",
+    "lucide-react": "^1.55.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.30.6"
   },
   "devDependencies": {
-    "@eslint/js": "^10.0.0",
-    "@types/node": "^24.0.0",
-    "eslint": "^10.10.0",
-    "eslint-plugin-react-hooks": "^7.0.0",
-    "globals": "^16.0.0",
-    "typescript": "~6.0.3",
-    "typescript-eslint": "^8.70.0",
-    "vitest": "^5.0.0"
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/react": "^18.3.31",
+    "@types/react-dom": "^18.3.7",
+    "@vitejs/plugin-react": "^4.7.0",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^5.9.3",
+    "vite": "^5.4.21",
+    "vite-plugin-pwa": "^0.21.2"
   }
 }

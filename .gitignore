@@ -1,24 +1,8 @@
 node_modules
 dist
-coverage
-*.tsbuildinfo
+dev-dist
 .env
 .env.local
-.env.*.local
-!.env.example
-.DS_Store
-npm-debug.log*
-pnpm-debug.log*
-
-# web
-apps/web/dev-dist
-apps/web/dist-ui
-apps/web/playwright-report
-apps/web/test-results
-
-# connector dev-only mock state (see apps/connector/README)
-apps/connector/.mock-state.json
-
-# supabase local
-supabase/.branches
-supabase/.temp
+router-api/node_modules
+router-api/.env
+*.log
